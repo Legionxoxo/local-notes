@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Save, Eye, Edit } from "lucide-react"
+import { Save } from "lucide-react"
 import { markdownToEditorJS, editorJSToMarkdown } from "@/lib/markdown-converter"
 import { getEditorTools } from "@/lib/editor-tools"
 
@@ -31,7 +31,6 @@ function useDebounce<T extends (...args: any[]) => any>(callback: T, delay: numb
 
 export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps) {
   const [editor, setEditor] = useState<any>(null)
-  const [isPreview, setIsPreview] = useState(false)
   const [markdownContent, setMarkdownContent] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
@@ -142,10 +141,6 @@ export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps
     }
   }
 
-  const togglePreview = () => {
-    setIsPreview(!isPreview)
-  }
-
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header - Fixed */}
@@ -167,11 +162,6 @@ export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps
             </Label>
           </div>
           <div className="flex gap-2">
-            {/* no need for preview -> causing bug*/}
-            {/* <Button onClick={togglePreview} variant="outline" size="sm">
-              {isPreview ? <Edit className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-              {isPreview ? "Edit" : "Preview"}
-            </Button> */}
             <Button onClick={handleManualSave} size="sm" disabled={isSaving}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? "Saving..." : "Save"}
@@ -180,46 +170,18 @@ export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps
         </div>
       </div>
 
-      {/* Editor/Preview - Scrollable */}
+      {/* Editor - Scrollable */}
       <div className="flex-1 overflow-auto">
-        {isPreview ? (
-          <div className="p-6 max-w-4xl mx-auto">
-            <div
-              className="prose prose-slate dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{
-                __html: markdownContent
-                  .split("\n")
-                  .map((line) => {
-                    if (line.startsWith("# ")) return `<h1>${line.slice(2)}</h1>`
-                    if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`
-                    if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`
-                    if (line.startsWith("#### ")) return `<h4>${line.slice(5)}</h4>`
-                    if (line.startsWith("##### ")) return `<h5>${line.slice(6)}</h5>`
-                    if (line.startsWith("###### ")) return `<h6>${line.slice(7)}</h6>`
-                    if (line.startsWith("> ")) return `<blockquote><p>${line.slice(2)}</p></blockquote>`
-                    if (line.startsWith("- ")) return `<ul><li>${line.slice(2)}</li></ul>`
-                    if (line.startsWith("* ")) return `<ul><li>${line.slice(2)}</li></ul>`
-                    if (line.match(/^\d+\. /)) return `<ol><li>${line.replace(/^\d+\. /, "")}</li></ol>`
-                    if (line.startsWith("```")) return line.includes("```") ? "<pre><code>" : "</code></pre>"
-                    if (line.trim() === "") return "<br>"
-                    return `<p>${line}</p>`
-                  })
-                  .join(""),
-              }}
-            />
-          </div>
-        ) : (
-          <div className="p-6 h-full">
-            <div
-              ref={editorContainerRef}
-              className="min-h-full prose prose-slate dark:prose-invert max-w-none"
-              style={{
-                fontSize: "16px",
-                lineHeight: "1.6",
-              }}
-            />
-          </div>
-        )}
+        <div className="p-6 h-full">
+          <div
+            ref={editorContainerRef}
+            className="min-h-full prose prose-slate dark:prose-invert max-w-none"
+            style={{
+              fontSize: "16px",
+              lineHeight: "1.6",
+            }}
+          />
+        </div>
       </div>
     </div>
   )

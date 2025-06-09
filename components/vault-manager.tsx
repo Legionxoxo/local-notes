@@ -79,7 +79,7 @@ export function VaultManager({
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm font-medium mb-2">Current Vault</h4>
-                  <p className="text-sm text-muted-foreground">{currentVault.name}</p>
+                  <p className="text-base text-muted-foreground font-bold">{currentVault.name}</p>
                 </div>
 
                 {availableVaults.length > 1 && (
