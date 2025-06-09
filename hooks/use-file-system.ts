@@ -364,15 +364,131 @@ Happy note-taking! 📝
             if (!currentVault) return;
 
             try {
-                // This is complex with File System API - for now we'll just refresh
-                // In a real implementation, you'd need to recursively copy and delete
-                console.log("Folder renaming not fully implemented yet");
+                // Get parent directory path and old folder name
+                const pathParts = oldPath.split("/");
+                const oldFolderName = pathParts.pop()!;
+                const parentPath =
+                    pathParts.length > 0 ? pathParts.join("/") : "";
+
+                // Navigate to parent directory
+                let parentHandle = currentVault.handle;
+                if (parentPath) {
+                    for (const part of pathParts) {
+                        parentHandle = await parentHandle.getDirectoryHandle(
+                            part
+                        );
+                    }
+                }
+
+                // Get the old folder handle
+                const oldFolderHandle = await parentHandle.getDirectoryHandle(
+                    oldFolderName
+                );
+
+                // Create new folder
+                const newFolderHandle = await parentHandle.getDirectoryHandle(
+                    newName,
+                    { create: true }
+                );
+
+                // Helper function to recursively copy contents
+                const copyFolderContents = async (
+                    sourceHandle: FileSystemDirectoryHandle,
+                    targetHandle: FileSystemDirectoryHandle,
+                    sourcePath: string,
+                    targetPath: string
+                ) => {
+                    // Copy all entries from source to target
+                    for await (const [name, handle] of (
+                        sourceHandle as any
+                    ).entries()) {
+                        const sourceItemPath = sourcePath
+                            ? `${sourcePath}/${name}`
+                            : name;
+                        const targetItemPath = targetPath
+                            ? `${targetPath}/${name}`
+                            : name;
+
+                        if (handle.kind === "file") {
+                            // Copy file
+                            const fileHandle = handle as FileSystemFileHandle;
+                            const file = await fileHandle.getFile();
+                            const content = await file.text();
+
+                            const newFileHandle =
+                                await targetHandle.getFileHandle(name, {
+                                    create: true,
+                                });
+                            const writable =
+                                await newFileHandle.createWritable();
+                            await writable.write(content);
+                            await writable.close();
+
+                            // Update current file reference if needed
+                            if (
+                                currentFile &&
+                                currentFile.path === sourceItemPath
+                            ) {
+                                setCurrentFile({
+                                    name: currentFile.name,
+                                    path: targetItemPath,
+                                    handle: newFileHandle,
+                                });
+                            }
+                        } else if (handle.kind === "directory") {
+                            // Create and copy directory recursively
+                            const dirHandle =
+                                handle as FileSystemDirectoryHandle;
+                            const newDirHandle =
+                                await targetHandle.getDirectoryHandle(name, {
+                                    create: true,
+                                });
+
+                            await copyFolderContents(
+                                dirHandle,
+                                newDirHandle,
+                                sourceItemPath,
+                                targetItemPath
+                            );
+                        }
+                    }
+                };
+
+                // Start the recursive copy
+                await copyFolderContents(
+                    oldFolderHandle,
+                    newFolderHandle,
+                    oldPath,
+                    parentPath ? `${parentPath}/${newName}` : newName
+                );
+
+                // Delete the old folder after successful copy
+                await parentHandle.removeEntry(oldFolderName, {
+                    recursive: true,
+                });
+
+                // Update any open file paths if they were in the renamed folder
+                if (currentFile && currentFile.path.startsWith(oldPath + "/")) {
+                    const newPath = currentFile.path.replace(
+                        oldPath,
+                        parentPath ? `${parentPath}/${newName}` : newName
+                    );
+
+                    // We don't need to update the handle as it was already updated during the copy
+                    setCurrentFile({
+                        ...currentFile,
+                        path: newPath,
+                    });
+                }
+
+                // Refresh file list
+                await refreshFiles();
             } catch (error) {
                 console.error("Error renaming folder:", error);
                 throw error;
             }
         },
-        [currentVault]
+        [currentVault, currentFile, refreshFiles]
     );
 
     const openFile = useCallback(

@@ -143,24 +143,9 @@ class ImageTool {
     }
 
     static get toolbox() {
-        // Create SVG icon element
-        const svgNS = "http://www.w3.org/2000/svg";
-        const icon = document.createElementNS(svgNS, "svg");
-        icon.setAttribute("width", "17");
-        icon.setAttribute("height", "15");
-        icon.setAttribute("viewBox", "0 0 336 276");
-
-        const path = document.createElementNS(svgNS, "path");
-        path.setAttribute(
-            "d",
-            "M291 150V79c0-19-15-34-34-34H79c-19 0-34 15-34 34v42l67-44 81 72 66-49 32 24v26zm0 52l-43-30-49 37-84-75-77 51v18c0 19 15 34 34 34h178c17 0 31-13 34-29zM79 0h178c44 0 79 35 79 79v118c0 44-35 79-79 79H79c-44 0-79-35-79-79V79C0 35 35 0 79 0z"
-        );
-
-        icon.appendChild(path);
-
         return {
             title: "Image",
-            icon,
+            icon: `<img src="/image-tool.svg" width="18" height="18" alt="icon" />`,
         };
     }
 }
