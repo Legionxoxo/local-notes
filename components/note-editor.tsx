@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -11,178 +11,173 @@ import { getEditorTools } from "@/lib/editor-tools"
 interface NoteEditorProps {
   fileName: string
   initialContent: any
-  onSave: (content: any) => void
+  onSave: (content: any) => Promise<void>
 }
 
-// Debounce utility
-function useDebounce<T extends (...args: any[]) => any>(callback: T, delay: number) {
-  const timeoutRef = useRef<NodeJS.Timeout>()
+const AUTO_SAVE_DEBOUNCE_MS = 3000
 
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      timeoutRef.current = setTimeout(() => callback(...args), delay)
-    },
-    [callback, delay],
-  )
-}
+const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSave }) => {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const editorInstance = useRef<any>(null) // Use any here since EditorJS is dynamically imported
+  const initializationLock = useRef(false)
+  const currentFileName = useRef<string | null>(null)
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null)
 
-export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps) {
-  const [editor, setEditor] = useState<any>(null)
-  const [markdownContent, setMarkdownContent] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
-  const editorContainerRef = useRef<HTMLDivElement>(null)
-  const isInitializedRef = useRef(false)
+  const [markdownContent, setMarkdownContent] = useState("")
 
-  // Debounced auto-save function
-  const debouncedAutoSave = useDebounce(async (content: any) => {
-    if (!autoSaveEnabled) return
+  // Cleanup editor instance safely
+  const destroyEditor = () => {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current)
+      debounceTimeout.current = null
+    }
 
-    setIsSaving(true)
+    if (editorInstance.current) {
+      try {
+        editorInstance.current.destroy()
+      } catch (err) {
+        console.warn("Error destroying editor:", err)
+      }
+      editorInstance.current = null
+    }
+    if (editorRef.current) {
+      editorRef.current.innerHTML = ""
+    }
+    initializationLock.current = false
+    currentFileName.current = null
+  }
+
+  // Initialize editor with content or empty if none
+  const initializeEditor = async (contentData: any = null) => {
+    if (initializationLock.current) {
+      console.log("Editor initialization in progress, skipping...")
+      return
+    }
+
+    initializationLock.current = true
+    console.log("Initializing editor for file:", fileName)
+
     try {
-      await onSave(content)
+      // Destroy existing editor before creating new one
+      destroyEditor()
+
+      // Small delay to ensure cleanup
+      await new Promise((res) => setTimeout(res, 150))
+
+      if (!editorRef.current) throw new Error("Editor container not found")
+
+      editorRef.current.innerHTML = ""
+
+      const data = contentData || initialContent || { blocks: [] }
+
+      const tools = await getEditorTools()
+
+      // Dynamically import EditorJS here to avoid SSR issues
+      const EditorJS = (await import("@editorjs/editorjs")).default
+
+      editorInstance.current = new EditorJS({
+        holder: editorRef.current,
+        tools,
+        placeholder: "Start writing your note...",
+        data,
+        autofocus: true,
+        onChange: () => {
+          if (debounceTimeout.current) clearTimeout(debounceTimeout.current)
+
+          debounceTimeout.current = setTimeout(async () => {
+            try {
+              if (!editorInstance.current) return
+
+              const outputData = await editorInstance.current.save()
+              const md = editorJSToMarkdown(outputData)
+              setMarkdownContent(md)
+
+              if (autoSaveEnabled) {
+                setIsSaving(true)
+                await onSave(outputData)
+                setIsSaving(false)
+              }
+            } catch (error) {
+              console.error("Auto-save error:", error)
+            }
+          }, AUTO_SAVE_DEBOUNCE_MS)
+        },
+        onReady: () => {
+          console.log("Editor.js is ready for file:", fileName)
+          initializationLock.current = false
+          currentFileName.current = fileName
+        },
+      })
     } catch (error) {
-      console.error("Auto-save failed:", error)
+      console.error("Error initializing editor:", error)
+      initializationLock.current = false
+      alert("Error initializing editor. Please refresh.")
+    }
+  }
+
+  // Effect to initialize editor only when fileName changes
+  useEffect(() => {
+    if (currentFileName.current !== fileName) {
+      initializeEditor()
+    }
+
+    // Cleanup on unmount or fileName change
+    return () => {
+      destroyEditor()
+    }
+  }, [fileName])
+
+  // Manual save button handler
+  const handleManualSave = async () => {
+    if (!editorInstance.current) {
+      alert("Editor not initialized yet.")
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      const outputData = await editorInstance.current.save()
+      await onSave(outputData)
+    } catch (error) {
+      console.error("Manual save error:", error)
+      alert("Failed to save note. Please try again.")
     } finally {
       setIsSaving(false)
-    }
-  }, 3000) // 3 second delay
-
-  // Initialize editor only once per file
-  useEffect(() => {
-    if (isInitializedRef.current) {
-      // Clean up previous editor
-      if (editor) {
-        editor.destroy()
-        setEditor(null)
-      }
-    }
-
-    const initEditor = async () => {
-      if (typeof window !== "undefined" && editorContainerRef.current) {
-        // Clear the container
-        editorContainerRef.current.innerHTML = ""
-
-        const EditorJS = (await import("@editorjs/editorjs")).default
-        const tools = await getEditorTools()
-
-        // Prepare initial data
-        let editorData = { blocks: [] }
-        if (initialContent) {
-          if (typeof initialContent === "string") {
-            editorData = markdownToEditorJS(initialContent)
-            setMarkdownContent(initialContent)
-          } else {
-            editorData = initialContent
-            const markdown = editorJSToMarkdown(initialContent)
-            setMarkdownContent(markdown)
-          }
-        }
-
-        try {
-          const editorInstance = new EditorJS({
-            holder: editorContainerRef.current,
-            placeholder: "Start writing your note...",
-            autofocus: true,
-            tools,
-            data: editorData,
-            onChange: async () => {
-              if (editorInstance) {
-                try {
-                  const content = await editorInstance.save()
-                  const markdown = editorJSToMarkdown(content)
-                  setMarkdownContent(markdown)
-
-                  // Trigger debounced auto-save
-                  if (autoSaveEnabled) {
-                    debouncedAutoSave(content)
-                  }
-                } catch (error) {
-                  console.error("Error in onChange:", error)
-                }
-              }
-            },
-            onReady: () => {
-              console.log("Editor is ready for:", fileName)
-            },
-          })
-
-          setEditor(editorInstance)
-          isInitializedRef.current = true
-        } catch (error) {
-          console.error("Error initializing editor:", error)
-        }
-      }
-    }
-
-    initEditor()
-
-    return () => {
-      if (editor) {
-        editor.destroy()
-      }
-    }
-  }, [fileName]) // Only re-initialize when fileName changes
-
-  const handleManualSave = async () => {
-    if (editor) {
-      try {
-        setIsSaving(true)
-        const content = await editor.save()
-        await onSave(content)
-      } catch (error) {
-        console.error("Error saving manually:", error)
-      } finally {
-        setIsSaving(false)
-      }
     }
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      {/* Header - Fixed */}
+    <div className="flex flex-col h-full">
       <div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">{fileName.replace(".md", "")}</h1>
-          {isSaving && <span className="text-sm text-muted-foreground animate-pulse">Saving...</span>}
-        </div>
+        <h1 className="text-lg font-semibold">{fileName.replace(".md", "")}</h1>
         <div className="flex items-center gap-4">
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="auto-save"
-              checked={autoSaveEnabled}
-              onCheckedChange={setAutoSaveEnabled}
-              className="data-[state=checked]:bg-green-600"
-            />
-            <Label htmlFor="auto-save" className="text-sm">
-              {/* Auto-save */}
-            </Label>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleManualSave} size="sm" disabled={isSaving}>
-              <Save className="w-4 h-4 mr-2" />
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
-          </div>
+          <Label htmlFor="auto-save" className="text-sm">
+            Auto-save
+          </Label>
+          <Switch
+            id="auto-save"
+            checked={autoSaveEnabled}
+            onCheckedChange={setAutoSaveEnabled}
+            className="data-[state=checked]:bg-green-600"
+          />
+          <Button onClick={handleManualSave} size="sm" disabled={isSaving}>
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
         </div>
       </div>
 
-      {/* Editor - Scrollable */}
-      <div className="flex-1 overflow-auto">
-        <div className="p-6 h-full">
-          <div
-            ref={editorContainerRef}
-            className="min-h-full prose prose-slate dark:prose-invert max-w-none"
-            style={{
-              fontSize: "16px",
-              lineHeight: "1.6",
-            }}
-          />
-        </div>
+      <div className="flex-1 overflow-auto p-6">
+        <div
+          ref={editorRef}
+          className="min-h-[300px] prose prose-slate dark:prose-invert max-w-none"
+          style={{ fontSize: "16px", lineHeight: "1.6" }}
+        />
       </div>
     </div>
   )
 }
+
+export default NoteEditor

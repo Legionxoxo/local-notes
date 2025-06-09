@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { FileTree } from "@/components/file-tree"
-import { NoteEditor } from "@/components/note-editor"
+import NoteEditor from "@/components/note-editor"
 import { VaultSelector } from "@/components/vault-selector"
 import { VaultManager } from "@/components/vault-manager"
 import { useFileSystem } from "@/hooks/use-file-system"
-import Image from "next/image"
 
 export default function NoteTakingApp() {
   const {
