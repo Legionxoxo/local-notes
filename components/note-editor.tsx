@@ -153,9 +153,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
       <div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
         <h1 className="text-lg font-semibold">{fileName.replace(".md", "")}</h1>
         <div className="flex items-center gap-4">
-          <Label htmlFor="auto-save" className="text-sm">
+          {/* <Label htmlFor="auto-save" className="text-sm">
             Auto-save
-          </Label>
+          </Label> */}
           <Switch
             id="auto-save"
             checked={autoSaveEnabled}
