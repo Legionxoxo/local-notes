@@ -6,6 +6,7 @@ import { NoteEditor } from "@/components/note-editor"
 import { VaultSelector } from "@/components/vault-selector"
 import { VaultManager } from "@/components/vault-manager"
 import { useFileSystem } from "@/hooks/use-file-system"
+import Image from "next/image"
 
 export default function NoteTakingApp() {
   const {
@@ -121,9 +122,18 @@ export default function NoteTakingApp() {
         {/* Sidebar Header - Fixed */}
         <div className="p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-semibold text-lg">{currentVault.name}</h2>
+            <div className="flex items-center gap-2">
+              <img src="/logo.svg" alt="Airvault logo" className="w-6 h-6" />
+              <div className="flex items-baseline gap-1">
+                <span className="text-sm text-muted-foreground">Vault:&nbsp;</span>
+                <span className="text-lg font-bold text-primary">{currentVault.name}</span>
+              </div>
+            </div>
+
+
+
           </div>
-          <p className="text-sm text-muted-foreground">Vault: {currentVault.name}</p>
+
         </div>
 
         {/* File Tree - Scrollable */}

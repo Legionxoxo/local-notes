@@ -163,14 +163,15 @@ export function NoteEditor({ fileName, initialContent, onSave }: NoteEditorProps
               className="data-[state=checked]:bg-green-600"
             />
             <Label htmlFor="auto-save" className="text-sm">
-              Auto-save
+              {/* Auto-save */}
             </Label>
           </div>
           <div className="flex gap-2">
-            <Button onClick={togglePreview} variant="outline" size="sm">
+            {/* no need for preview -> causing bug*/}
+            {/* <Button onClick={togglePreview} variant="outline" size="sm">
               {isPreview ? <Edit className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
               {isPreview ? "Edit" : "Preview"}
-            </Button>
+            </Button> */}
             <Button onClick={handleManualSave} size="sm" disabled={isSaving}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? "Saving..." : "Save"}

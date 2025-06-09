@@ -42,7 +42,7 @@ export function VaultSelector({ onSelectVault }: VaultSelectorProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-            <BookOpen className="w-6 h-6 text-primary" />
+            <img src="/logo.svg" alt="Airvault logo" className="w-8 h-8" />
           </div>
           <CardTitle className="text-2xl">Create Your Vault</CardTitle>
           <CardDescription>
