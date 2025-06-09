@@ -2,8 +2,19 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { FileText, Folder, FolderOpen, ChevronRight, ChevronDown, Plus, FolderPlus, Trash2 } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import {
+  FileText,
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  FolderPlus,
+  Trash2,
+  Search,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -18,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import { SearchResults } from "@/components/search-results"
 
 interface FileInfo {
   name: string
@@ -59,6 +71,40 @@ export function FileTree({
   const [editingValue, setEditingValue] = useState("")
   const [creatingItem, setCreatingItem] = useState<{ type: "file" | "folder"; parentPath?: string } | null>(null)
   const [creatingValue, setCreatingValue] = useState("")
+  const [isSearchActive, setIsSearchActive] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Handle search
+  useEffect(() => {
+    if (isSearchActive && searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      const results = files.filter((file) => {
+        const fileName = file.split("/").pop() || ""
+        return fileName.toLowerCase().includes(query)
+      })
+      setSearchResults(results)
+    } else {
+      setSearchResults([])
+    }
+  }, [searchQuery, files, isSearchActive])
+
+  // Focus search input when search is activated
+  useEffect(() => {
+    if (isSearchActive && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [isSearchActive])
+
+  // Toggle search
+  const toggleSearch = () => {
+    setIsSearchActive(!isSearchActive)
+    if (!isSearchActive) {
+      setSearchQuery("")
+      setSearchResults([])
+    }
+  }
 
   // Organize files and folders into a tree structure
   const organizeItems = (): FileInfo[] => {
@@ -393,61 +439,107 @@ export function FileTree({
     }
   }
 
+  const renderSearchResults = () => {
+    return (
+      <SearchResults
+        results={searchResults}
+        query={searchQuery}
+        currentFile={currentFile}
+        onFileSelect={onFileSelect}
+      />
+    )
+  }
+
   const organizedItems = organizeItems()
 
   return (
     <div className="p-2">
       <div className="flex items-center justify-between mb-2 px-2">
-        <h3 className="text-sm font-medium">Files</h3>
+        <h3 className="text-sm font-medium">{isSearchActive ? "Search" : "Files"}</h3>
         <div className="flex gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={() => startCreating("file")}
-            title="New file"
-          >
-            <Plus className="w-3 h-3" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={() => startCreating("folder")}
-            title="New folder"
-          >
-            <FolderPlus className="w-3 h-3" />
-          </Button>
+          {isSearchActive ? (
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={toggleSearch} title="Close search">
+              <X className="w-3 h-3" />
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => startCreating("file")}
+                title="New file"
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={() => startCreating("folder")}
+                title="New folder"
+              >
+                <FolderPlus className="w-3 h-3" />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={toggleSearch} title="Search files">
+                <Search className="w-3 h-3" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
+
+      {isSearchActive && (
+        <div className="mb-2 px-2">
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notes..."
+            className="h-8 text-sm"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                toggleSearch()
+              }
+            }}
+          />
+        </div>
+      )}
+
       <div className="space-y-1">
-        {creatingItem && !creatingItem.parentPath && (
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm">
-            {creatingItem.type === "file" ? (
-              <FileText className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              <Folder className="w-4 h-4 flex-shrink-0" />
+        {isSearchActive ? (
+          renderSearchResults()
+        ) : (
+          <>
+            {creatingItem && !creatingItem.parentPath && (
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm">
+                {creatingItem.type === "file" ? (
+                  <FileText className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <Folder className="w-4 h-4 flex-shrink-0" />
+                )}
+                <Input
+                  value={creatingValue}
+                  onChange={(e) => setCreatingValue(e.target.value)}
+                  onBlur={finishCreating}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") finishCreating()
+                    if (e.key === "Escape") {
+                      setCreatingItem(null)
+                      setCreatingValue("")
+                    }
+                  }}
+                  placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
+                  className="h-6 text-sm"
+                  autoFocus
+                />
+              </div>
             )}
-            <Input
-              value={creatingValue}
-              onChange={(e) => setCreatingValue(e.target.value)}
-              onBlur={finishCreating}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") finishCreating()
-                if (e.key === "Escape") {
-                  setCreatingItem(null)
-                  setCreatingValue("")
-                }
-              }}
-              placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
-              className="h-6 text-sm"
-              autoFocus
-            />
-          </div>
-        )}
-        {organizedItems.map((item) => renderItem(item))}
-        {organizedItems.length === 0 && !creatingItem && (
-          <p className="text-sm text-muted-foreground px-2 py-4">No files found. Create your first note!</p>
+            {organizedItems.map((item) => renderItem(item))}
+            {organizedItems.length === 0 && !creatingItem && (
+              <p className="text-sm text-muted-foreground px-2 py-4">No files found. Create your first note!</p>
+            )}
+          </>
         )}
       </div>
     </div>
