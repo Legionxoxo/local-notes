@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
     markdownToEditorJS,
     editorJSToMarkdown,
 } from "@/lib/markdown-converter";
+import { getWelcomeContent } from "@/lib/welcome-template";
+import {
+    saveHandle,
+    getHandle,
+    removeHandle,
+    getAllHandles,
+} from "@/lib/indexed-db";
 
 interface FileInfo {
     name: string;
@@ -24,6 +31,79 @@ export function useFileSystem() {
     const [files, setFiles] = useState<string[]>([]);
     const [folders, setFolders] = useState<string[]>([]);
     const [currentFile, setCurrentFile] = useState<FileInfo | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Load persisted vault on app start
+    useEffect(() => {
+        const loadPersistedVault = async () => {
+            try {
+                // Get the current vault handle from IndexedDB
+                const currentVaultHandle = await getHandle("currentVault");
+                const parentHandle = await getHandle("parentDirectory");
+
+                if (currentVaultHandle && parentHandle) {
+                    // Verify the handle is still valid by testing permission
+                    const permission = await (
+                        currentVaultHandle as any
+                    ).queryPermission({ mode: "readwrite" });
+
+                    if (permission === "granted") {
+                        // Get vault name from the handle
+                        const vaultName = currentVaultHandle.name;
+
+                        const vaultInfo: VaultInfo = {
+                            name: vaultName,
+                            handle: currentVaultHandle,
+                            parentHandle: parentHandle,
+                        };
+
+                        setCurrentVault(vaultInfo);
+                        await refreshFiles(currentVaultHandle);
+                        await loadAvailableVaults(parentHandle);
+
+                        // Try to open welcome.md if it exists and no other file is open
+                        const welcomeExists = files.includes("welcome.md");
+                        if (welcomeExists && !currentFile) {
+                            const welcomeContent = await openFile("welcome.md");
+                            // openFile already sets currentFile, so we don't need to do it again
+                        }
+                    } else {
+                        // Permission revoked, clear persisted data
+                        await removeHandle("currentVault");
+                        await removeHandle("parentDirectory");
+                    }
+                }
+
+                // Load any other available vaults
+                const allHandles = await getAllHandles();
+                for (const [key, handle] of Object.entries(allHandles)) {
+                    if (
+                        key.startsWith("vault_") &&
+                        handle !== currentVaultHandle
+                    ) {
+                        try {
+                            const permission = await (
+                                handle as any
+                            ).queryPermission({
+                                mode: "readwrite",
+                            });
+                            if (permission !== "granted") {
+                                await removeHandle(key);
+                            }
+                        } catch {
+                            await removeHandle(key);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading persisted vault:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadPersistedVault();
+    }, []);
 
     // Check if a directory is a valid vault
     const isValidVault = useCallback(
@@ -82,43 +162,7 @@ export function useFileSystem() {
                     await markerWritable.close();
 
                     // Create welcome.md file
-                    const welcomeContent = `# Welcome to ${vaultName}
-
-Welcome to your new vault! This is your personal knowledge base where you can:
-
-## Getting Started
-
-- **Create notes**: Click the + button to create a new note
-- **Organize**: Create folders to organize your notes
-- **Rich editing**: Use the toolbar to format your text with headers, lists, tables, and more
-- **Auto-save**: Your notes are automatically saved as you type
-
-## Features
-
-### Text Formatting
-- **Bold** and *italic* text
-- Headers (H1 through H6)
-- Lists and checklists
-- Code blocks and inline code
-- Tables
-- Quotes
-
-### Organization
-- Create folders and subfolders
-- Drag and drop files between folders
-- Search across all your notes
-
-### File Format
-All your notes are saved as standard Markdown (.md) files, so you can:
-- Open them in any text editor
-- Use them with other note-taking apps
-- Version control them with Git
-- Share them easily
-
----
-
-Happy note-taking! 📝
-`;
+                    const welcomeContent = getWelcomeContent(vaultName);
 
                     const welcomeFileHandle = await vaultHandle.getFileHandle(
                         "welcome.md",
@@ -133,6 +177,11 @@ Happy note-taking! 📝
                         handle: vaultHandle,
                         parentHandle: parentHandle,
                     };
+
+                    // Persist the handles
+                    await saveHandle("currentVault", vaultHandle);
+                    await saveHandle("parentDirectory", parentHandle);
+                    await saveHandle(`vault_${vaultName}`, vaultHandle);
 
                     setCurrentVault(vaultInfo);
                     await refreshFiles(vaultHandle);
@@ -181,6 +230,10 @@ Happy note-taking! 📝
 
     const switchVault = useCallback(async (vaultInfo: VaultInfo) => {
         try {
+            // Persist the new current vault
+            await saveHandle("currentVault", vaultInfo.handle);
+            await saveHandle("parentDirectory", vaultInfo.parentHandle);
+
             setCurrentVault(vaultInfo);
             await refreshFiles(vaultInfo.handle);
             setCurrentFile(null);
@@ -702,6 +755,13 @@ Happy note-taking! 📝
                     recursive: true,
                 });
 
+                // Remove from IndexedDB
+                await removeHandle(`vault_${vault.name}`);
+                if (vault === currentVault) {
+                    await removeHandle("currentVault");
+                    await removeHandle("parentDirectory");
+                }
+
                 // Update available vaults
                 await loadAvailableVaults(vault.parentHandle);
 
@@ -720,7 +780,11 @@ Happy note-taking! 📝
         [currentVault, loadAvailableVaults]
     );
 
-    const createNewVault = useCallback(() => {
+    const createNewVault = useCallback(async () => {
+        // Clear current vault from persistence
+        await removeHandle("currentVault");
+        await removeHandle("parentDirectory");
+
         // Reset state to show vault selector
         setCurrentVault(null);
         setFiles([]);
@@ -734,6 +798,7 @@ Happy note-taking! 📝
         files,
         folders,
         currentFile,
+        isLoading,
         selectDirectory,
         switchVault,
         createFile,

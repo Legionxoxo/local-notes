@@ -14,6 +14,7 @@ export default function NoteTakingApp() {
     files,
     folders,
     currentFile,
+    isLoading,
     selectDirectory,
     switchVault,
     createFile,
@@ -109,6 +110,18 @@ export default function NoteTakingApp() {
     }
   }
 
+  // Show loading state while initializing
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-background items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading vault...</p>
+        </div>
+      </div>
+    )
+  }
+
   // Show vault selector if no vault is selected
   if (!currentVault) {
     return <VaultSelector onSelectVault={selectDirectory} />
@@ -116,9 +129,7 @@ export default function NoteTakingApp() {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar - Fixed Height */}
       <div className="w-80 border-r border-border flex flex-col h-full">
-        {/* Sidebar Header - Fixed */}
         <div className="p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -128,11 +139,7 @@ export default function NoteTakingApp() {
                 <span className="text-lg font-bold text-primary">{currentVault.name}</span>
               </div>
             </div>
-
-
-
           </div>
-
         </div>
 
         {/* File Tree - Scrollable */}
@@ -172,10 +179,10 @@ export default function NoteTakingApp() {
             onSave={handleSave}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground h-full">
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-2">Welcome to Your Vault</h2>
-              <p>Create your first note to get started</p>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground h-full p-4">
+            <div className="text-center max-w-md">
+              <h2 className="text-3xl font-bold mb-3 tracking-tight">Welcome to Your Vault</h2>
+              <p className="text-lg leading-relaxed">Create your first note to get started.</p>
             </div>
           </div>
         )}
