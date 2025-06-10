@@ -3,9 +3,8 @@
 import React, { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import { Save } from "lucide-react"
-import { markdownToEditorJS, editorJSToMarkdown } from "@/lib/markdown-converter"
+import { editorJSToMarkdown } from "@/lib/markdown-converter"
 import { getEditorTools } from "@/lib/editor-tools"
 
 interface NoteEditorProps {
@@ -105,10 +104,19 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
           }, AUTO_SAVE_DEBOUNCE_MS)
         },
         onReady: () => {
-          console.log("Editor.js is ready for file:", fileName)
-          initializationLock.current = false
-          currentFileName.current = fileName
-        },
+          console.log("Editor.js is ready for file:", fileName);
+          initializationLock.current = false;
+          currentFileName.current = fileName;
+
+          const items = document.querySelectorAll('.ce-popover-item[data-item-name="list"]');
+          items.forEach((item) => {
+            const title = item.querySelector('.ce-popover-item__title') as HTMLElement | null;
+            if (title && title.textContent?.trim().toLowerCase() === 'checklist') {
+              (item as HTMLElement).style.display = 'none';
+            }
+          });
+        }
+
       })
     } catch (error) {
       console.error("Error initializing editor:", error)
@@ -153,9 +161,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
       <div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
         <h1 className="text-lg font-semibold">{fileName.replace(".md", "")}</h1>
         <div className="flex items-center gap-4">
-          {/* <Label htmlFor="auto-save" className="text-sm">
-            Auto-save
-          </Label> */}
           <Switch
             id="auto-save"
             checked={autoSaveEnabled}
