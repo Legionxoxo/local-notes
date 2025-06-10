@@ -27,7 +27,7 @@ class ImageTool {
         this.wrapper.innerHTML = `
         <div style="text-align: center; margin: 15px 0;">
           <img src="${url}" alt="${caption}" style="max-width: 100%; height: auto; border-radius: 4px;" />
-          <input type="text" placeholder="Caption (optional)" value="${caption}" 
+          <input type="text" placeholder="Image name" value="${caption}" 
                  style="width: 100%; margin-top: 8px; padding: 4px; border: 1px solid #ddd; border-radius: 4px; text-align: center;"
                  onchange="this.parentElement.querySelector('img').alt = this.value" />
         </div>
@@ -116,9 +116,11 @@ class ImageTool {
         const reader = new FileReader();
         reader.onload = (e) => {
             if (e.target && typeof e.target.result === "string") {
+                // Store the full data URL for display in editor
                 this.data.url = e.target.result;
-                this.data.caption = "";
-                this._createImage(e.target.result);
+                // Use filename as caption
+                this.data.caption = file.name;
+                this._createImage(e.target.result, file.name);
             }
         };
         reader.readAsDataURL(file);
@@ -134,7 +136,7 @@ class ImageTool {
 
         if (img) {
             return {
-                url: img.src,
+                url: this.data.url || "", // Keep the full data URL for editor display
                 caption: captionInput ? captionInput.value : "",
             };
         }

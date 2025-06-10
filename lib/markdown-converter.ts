@@ -112,15 +112,27 @@ export function markdownToEditorJS(markdown: string): any {
             i = j - 1;
         }
         // Images
-        else if (line.match(/!\[.*?\]\(.*?\)/)) {
+        else if (line.match(/!\[.*?\]\(.*?\)/) || line.match(/!\[\[.*?\]\]/)) {
             flushList();
-            const match = line.match(/!\[(.*?)\]\((.*?)\)/);
-            if (match) {
+            // Handle both standard markdown and Obsidian-style images
+            const standardMatch = line.match(/!\[(.*?)\]\((.*?)\)/);
+            const obsidianMatch = line.match(/!\[\[(.*?)\]\]/);
+
+            if (standardMatch) {
                 blocks.push({
                     type: "image",
                     data: {
-                        url: match[2],
-                        caption: match[1] || "",
+                        url: standardMatch[2],
+                        caption: standardMatch[1] || "",
+                    },
+                });
+            } else if (obsidianMatch) {
+                const imageName = obsidianMatch[1];
+                blocks.push({
+                    type: "image",
+                    data: {
+                        url: imageName,
+                        caption: imageName,
                     },
                 });
             }
@@ -457,7 +469,12 @@ export function editorJSToMarkdown(data: any): string {
                 case "image":
                     const imageUrl = block.data.url || "";
                     const caption = block.data.caption || "";
-                    return `![${caption}](${imageUrl})`;
+                    // Extract filename from URL if it's a data URL or full path
+                    const fileName = imageUrl.includes("/")
+                        ? imageUrl.split("/").pop()
+                        : imageUrl;
+                    // Use Obsidian-style syntax with just the filename
+                    return `![[${fileName}]]`;
 
                 default:
                     // Handle any other block types
