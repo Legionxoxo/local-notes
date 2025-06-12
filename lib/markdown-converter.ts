@@ -273,239 +273,77 @@ export function markdownToEditorJS(markdown: string): any {
 export function editorJSToMarkdown(data: any): string {
     if (!data || !data.blocks) return "";
 
-    return data.blocks
-        .map((block: any) => {
-            switch (block.type) {
-                case "header":
-                    const level = "#".repeat(block.data.level || 1);
-                    return `${level} ${block.data.text || ""}`;
+    let markdown = "";
+    let listStack: { type: string; indent: number }[] = [];
 
-                case "paragraph":
-                    // Handle rich text formatting in paragraphs
-                    let text = block.data.text || "";
-
-                    // If text is an object or contains HTML, extract plain text
-                    if (typeof text === "object") {
-                        return "";
+    for (const block of data.blocks) {
+        switch (block.type) {
+            case "header":
+                markdown +=
+                    "#".repeat(block.data.level) +
+                    " " +
+                    block.data.text +
+                    "\n\n";
+                break;
+            case "paragraph":
+                markdown += block.data.text + "\n\n";
+                break;
+            case "list":
+                const listType = block.data.style === "ordered" ? "1. " : "- ";
+                block.data.items.forEach((item: string) => {
+                    markdown += listType + item + "\n";
+                });
+                markdown += "\n";
+                break;
+            case "checklist":
+                block.data.items.forEach(
+                    (item: { text: string; checked: boolean }) => {
+                        markdown += `- [${item.checked ? "x" : " "}] ${
+                            item.text
+                        }\n`;
                     }
+                );
+                markdown += "\n";
+                break;
+            case "table":
+                // Add table header
+                markdown += "| " + block.data.content[0].join(" | ") + " |\n";
+                markdown +=
+                    "| " +
+                    block.data.content[0].map(() => "---").join(" | ") +
+                    " |\n";
+                // Add table rows
+                for (let i = 1; i < block.data.content.length; i++) {
+                    markdown +=
+                        "| " + block.data.content[i].join(" | ") + " |\n";
+                }
+                markdown += "\n";
+                break;
+            case "code":
+                markdown += "```" + (block.data.language || "") + "\n";
+                markdown += block.data.code + "\n";
+                markdown += "```\n\n";
+                break;
+            case "delimiter":
+                markdown += "---\n\n";
+                break;
+            case "image":
+                // Handle temporary blob URLs
+                if (
+                    block.data.isTemporary &&
+                    block.data.url.startsWith("blob:")
+                ) {
+                    // The image will be saved when the file is saved
+                    markdown += `![[${block.data.caption || "image"}]]\n\n`;
+                } else {
+                    markdown += `![[${block.data.url}]]\n\n`;
+                }
+                break;
+            case "marker":
+                markdown += "==" + block.data.text + "==\n\n";
+                break;
+        }
+    }
 
-                    // Convert HTML tags to markdown
-                    text = text.replace(/<code>([^<]+)<\/code>/g, "`$1`");
-                    text = text.replace(/<strong>([^<]+)<\/strong>/g, "**$1**");
-                    text = text.replace(/<em>([^<]+)<\/em>/g, "*$1*");
-                    text = text.replace(
-                        /<a href="([^"]+)">([^<]+)<\/a>/g,
-                        "[$2]($1)"
-                    );
-
-                    // Remove any remaining HTML tags and decode entities
-                    text = text.replace(/<[^>]*>/g, "");
-                    text = text.replace(/&nbsp;/g, " ");
-                    text = text.replace(/&amp;/g, "&");
-                    text = text.replace(/&lt;/g, "<");
-                    text = text.replace(/&gt;/g, ">");
-
-                    return text;
-
-                case "list":
-                    const style =
-                        block.data.style === "ordered"
-                            ? "ordered"
-                            : "unordered";
-                    if (!block.data.items || !Array.isArray(block.data.items)) {
-                        return "";
-                    }
-
-                    return block.data.items
-                        .map((item: any, index: number) => {
-                            // Handle both string items and object items
-                            let itemText = "";
-                            if (typeof item === "string") {
-                                itemText = item;
-                            } else if (
-                                item &&
-                                typeof item === "object" &&
-                                item.content
-                            ) {
-                                itemText = item.content;
-                            } else if (
-                                item &&
-                                typeof item === "object" &&
-                                item.text
-                            ) {
-                                itemText = item.text;
-                            } else {
-                                itemText = String(item || "");
-                            }
-
-                            // Convert HTML tags to markdown
-                            itemText = itemText.replace(
-                                /<code>([^<]+)<\/code>/g,
-                                "`$1`"
-                            );
-                            itemText = itemText.replace(
-                                /<strong>([^<]+)<\/strong>/g,
-                                "**$1**"
-                            );
-                            itemText = itemText.replace(
-                                /<em>([^<]+)<\/em>/g,
-                                "*$1*"
-                            );
-                            itemText = itemText.replace(
-                                /<a href="([^"]+)">([^<]+)<\/a>/g,
-                                "[$2]($1)"
-                            );
-
-                            // Remove any remaining HTML tags
-                            itemText = itemText.replace(/<[^>]*>/g, "");
-
-                            const prefix =
-                                style === "ordered" ? `${index + 1}. ` : "- ";
-                            return `${prefix}${itemText}`;
-                        })
-                        .join("\n");
-
-                case "checklist":
-                    if (!block.data.items || !Array.isArray(block.data.items)) {
-                        return "";
-                    }
-
-                    return block.data.items
-                        .map((item: any) => {
-                            let itemText = "";
-                            if (typeof item === "string") {
-                                itemText = item;
-                            } else if (item && typeof item === "object") {
-                                itemText = item.text || item.content || "";
-                            }
-
-                            // Convert HTML tags to markdown
-                            itemText = itemText.replace(
-                                /<code>([^<]+)<\/code>/g,
-                                "`$1`"
-                            );
-                            itemText = itemText.replace(
-                                /<strong>([^<]+)<\/strong>/g,
-                                "**$1**"
-                            );
-                            itemText = itemText.replace(
-                                /<em>([^<]+)<\/em>/g,
-                                "*$1*"
-                            );
-                            itemText = itemText.replace(
-                                /<a href="([^"]+)">([^<]+)<\/a>/g,
-                                "[$2]($1)"
-                            );
-
-                            // Remove any remaining HTML tags
-                            itemText = itemText.replace(/<[^>]*>/g, "");
-
-                            const checked = item.checked ? "x" : " ";
-                            return `- [${checked}] ${itemText}`;
-                        })
-                        .join("\n");
-
-                case "quote":
-                    let quoteText = block.data.text || "";
-                    if (typeof quoteText === "object") {
-                        quoteText = "";
-                    }
-
-                    // Convert HTML tags to markdown
-                    quoteText = quoteText.replace(
-                        /<code>([^<]+)<\/code>/g,
-                        "`$1`"
-                    );
-                    quoteText = quoteText.replace(
-                        /<strong>([^<]+)<\/strong>/g,
-                        "**$1**"
-                    );
-                    quoteText = quoteText.replace(/<em>([^<]+)<\/em>/g, "*$1*");
-                    quoteText = quoteText.replace(
-                        /<a href="([^"]+)">([^<]+)<\/a>/g,
-                        "[$2]($1)"
-                    );
-
-                    // Remove any remaining HTML tags
-                    quoteText = quoteText.replace(/<[^>]*>/g, "");
-
-                    return `> ${quoteText}`;
-
-                case "code":
-                    const code = block.data.code || "";
-                    const language = block.data.language || "";
-                    return `\`\`\`${language}\n${code}\n\`\`\``;
-
-                case "delimiter":
-                    return "---";
-
-                case "table":
-                    if (
-                        !block.data.content ||
-                        !Array.isArray(block.data.content)
-                    )
-                        return "";
-                    const rows = block.data.content;
-                    let markdown = "";
-
-                    // Header row
-                    if (rows[0] && Array.isArray(rows[0])) {
-                        markdown += "| " + rows[0].join(" | ") + " |\n";
-                        markdown +=
-                            "| " +
-                            rows[0].map(() => "---").join(" | ") +
-                            " |\n";
-                    }
-
-                    // Data rows
-                    for (let i = 1; i < rows.length; i++) {
-                        if (rows[i] && Array.isArray(rows[i])) {
-                            markdown += "| " + rows[i].join(" | ") + " |\n";
-                        }
-                    }
-
-                    return markdown.trim();
-
-                case "image":
-                    const imageUrl = block.data.url || "";
-                    const caption = block.data.caption || "";
-                    // Extract filename from URL if it's a data URL or full path
-                    const fileName = imageUrl.includes("/")
-                        ? imageUrl.split("/").pop()
-                        : imageUrl;
-                    // Use Obsidian-style syntax with just the filename
-                    return `![[${fileName}]]`;
-
-                default:
-                    // Handle any other block types
-                    let defaultText = "";
-                    if (block.data && typeof block.data.text === "string") {
-                        defaultText = block.data.text;
-
-                        // Convert HTML tags to markdown
-                        defaultText = defaultText.replace(
-                            /<code>([^<]+)<\/code>/g,
-                            "`$1`"
-                        );
-                        defaultText = defaultText.replace(
-                            /<strong>([^<]+)<\/strong>/g,
-                            "**$1**"
-                        );
-                        defaultText = defaultText.replace(
-                            /<em>([^<]+)<\/em>/g,
-                            "*$1*"
-                        );
-                        defaultText = defaultText.replace(
-                            /<a href="([^"]+)">([^<]+)<\/a>/g,
-                            "[$2]($1)"
-                        );
-
-                        // Remove any remaining HTML tags
-                        defaultText = defaultText.replace(/<[^>]*>/g, "");
-                    }
-                    return defaultText;
-            }
-        })
-        .filter((text: string) => text.trim() !== "") // Remove empty blocks
-        .join("\n\n");
+    return markdown;
 }

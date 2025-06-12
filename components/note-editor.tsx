@@ -10,11 +10,13 @@ interface NoteEditorProps {
   fileName: string
   initialContent: any
   onSave: (content: any) => Promise<void>
+  currentFileHandle?: FileSystemFileHandle
+  currentDirectoryHandle?: FileSystemDirectoryHandle
 }
 
 const AUTO_SAVE_DEBOUNCE_MS = 1500
 
-const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSave }) => {
+const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSave, currentFileHandle, currentDirectoryHandle }) => {
   const editorRef = useRef<HTMLDivElement>(null)
   const editorInstance = useRef<any>(null) // Use any here since EditorJS is dynamically imported
   const initializationLock = useRef(false)
@@ -55,7 +57,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
     }
 
     initializationLock.current = true
-    console.log("Initializing editor for file:", fileName)
+    console.log("Initializing editor for file:", fileName, {
+      hasFileHandle: !!currentFileHandle,
+      hasDirectoryHandle: !!currentDirectoryHandle
+    })
 
     try {
       // Destroy existing editor before creating new one
@@ -70,7 +75,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
 
       const data = contentData || initialContent || { blocks: [] }
 
-      const tools = await getEditorTools()
+      const tools = await getEditorTools(currentFileHandle, currentDirectoryHandle)
 
       // Dynamically import EditorJS here to avoid SSR issues
       const EditorJS = (await import("@editorjs/editorjs")).default
@@ -103,19 +108,21 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
           }, AUTO_SAVE_DEBOUNCE_MS)
         },
         onReady: () => {
-          console.log("Editor.js is ready for file:", fileName);
-          initializationLock.current = false;
-          currentFileName.current = fileName;
+          console.log("Editor.js is ready for file:", fileName, {
+            hasFileHandle: !!currentFileHandle,
+            hasDirectoryHandle: !!currentDirectoryHandle
+          })
+          initializationLock.current = false
+          currentFileName.current = fileName
 
-          const items = document.querySelectorAll('.ce-popover-item[data-item-name="list"]');
+          const items = document.querySelectorAll('.ce-popover-item[data-item-name="list"]')
           items.forEach((item) => {
-            const title = item.querySelector('.ce-popover-item__title') as HTMLElement | null;
+            const title = item.querySelector('.ce-popover-item__title') as HTMLElement | null
             if (title && title.textContent?.trim().toLowerCase() === 'checklist') {
-              (item as HTMLElement).style.display = 'none';
+              (item as HTMLElement).style.display = 'none'
             }
-          });
+          })
         }
-
       })
     } catch (error) {
       console.error("Error initializing editor:", error)
@@ -134,7 +141,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
     return () => {
       destroyEditor()
     }
-  }, [fileName])
+  }, [fileName, currentFileHandle, currentDirectoryHandle])
 
   // Manual save button handler
   const handleManualSave = async () => {

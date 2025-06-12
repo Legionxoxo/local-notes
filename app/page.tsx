@@ -47,6 +47,17 @@ export default function NoteTakingApp() {
     }
   }, [currentVault, files, currentFile])
 
+  useEffect(() => {
+    if (currentFile) {
+      console.log("Current file info:", {
+        name: currentFile.name,
+        path: currentFile.path,
+        hasFileHandle: !!currentFile.handle,
+        hasDirectoryHandle: !!currentFile.directoryHandle
+      })
+    }
+  }, [currentFile])
+
   const handleSave = async (content: any) => {
     if (currentFile) {
       await saveFile(currentFile.path, content)
@@ -220,6 +231,8 @@ export default function NoteTakingApp() {
             fileName={currentFile.name}
             initialContent={editorContent}
             onSave={handleSave}
+            currentFileHandle={currentFile.handle}
+            currentDirectoryHandle={currentFile.directoryHandle}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground h-full p-4">

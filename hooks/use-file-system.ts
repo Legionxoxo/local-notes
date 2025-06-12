@@ -19,6 +19,7 @@ interface FileInfo {
     name: string;
     path: string;
     handle: FileSystemFileHandle;
+    directoryHandle: FileSystemDirectoryHandle;
 }
 
 interface VaultInfo {
@@ -203,6 +204,7 @@ export function useFileSystem() {
                         name: "welcome.md",
                         path: "welcome.md",
                         handle: welcomeFileHandle,
+                        directoryHandle: vaultHandle,
                     });
                 }
             } catch (error) {
@@ -340,6 +342,7 @@ export function useFileSystem() {
                     name: fileName,
                     path: filePath,
                     handle: fileHandle,
+                    directoryHandle: targetHandle,
                 });
             } catch (error) {
                 console.error("Error creating file:", error);
@@ -440,6 +443,7 @@ export function useFileSystem() {
                         name: newFileName,
                         path: newPath,
                         handle: newFileHandle,
+                        directoryHandle: sourceHandle,
                     });
                 }
             } catch (error) {
@@ -533,6 +537,8 @@ export function useFileSystem() {
                                     name: currentFile.name,
                                     path: targetItemPath,
                                     handle: newFileHandle,
+                                    directoryHandle:
+                                        currentFile.directoryHandle,
                                 });
                             }
                         } else if (handle.kind === "directory") {
@@ -612,14 +618,51 @@ export function useFileSystem() {
                 const file = await fileHandle.getFile();
                 const content = await file.text();
 
-                setCurrentFile({
+                // Convert markdown to EditorJS format
+                const editorData = markdownToEditorJS(content);
+
+                // Process image blocks to load images
+                if (editorData.blocks) {
+                    for (const block of editorData.blocks) {
+                        if (block.type === "image" && block.data.url) {
+                            try {
+                                // Get the image file handle
+                                const imageHandle =
+                                    await currentHandle.getFileHandle(
+                                        block.data.url
+                                    );
+                                const imageFile = await imageHandle.getFile();
+                                // Create a blob URL for the image
+                                const blob = new Blob(
+                                    [await imageFile.arrayBuffer()],
+                                    { type: imageFile.type }
+                                );
+                                block.data.url = URL.createObjectURL(blob);
+                            } catch (error) {
+                                console.error("Error loading image:", error);
+                                // If image can't be loaded, keep the original URL
+                            }
+                        }
+                    }
+                }
+
+                // Create the file info with both handles
+                const fileInfo: FileInfo = {
                     name: fileName,
                     path: filePath,
                     handle: fileHandle,
+                    directoryHandle: currentHandle,
+                };
+
+                console.log("Opening file with info:", {
+                    name: fileInfo.name,
+                    path: fileInfo.path,
+                    hasFileHandle: !!fileInfo.handle,
+                    hasDirectoryHandle: !!fileInfo.directoryHandle,
                 });
 
-                // Convert markdown to EditorJS format
-                return markdownToEditorJS(content);
+                setCurrentFile(fileInfo);
+                return editorData;
             } catch (error) {
                 console.error("Error opening file:", error);
                 return null;
@@ -643,6 +686,50 @@ export function useFileSystem() {
                     currentHandle = await currentHandle.getDirectoryHandle(
                         part
                     );
+                }
+
+                // Process any temporary blob URLs in the content
+                if (content.blocks) {
+                    for (const block of content.blocks) {
+                        if (
+                            block.type === "image" &&
+                            block.data.isTemporary &&
+                            block.data.url.startsWith("blob:")
+                        ) {
+                            try {
+                                // Fetch the blob data
+                                const response = await fetch(block.data.url);
+                                const blob = await response.blob();
+
+                                // Create a unique filename for the image
+                                const timestamp = Date.now();
+                                const extension =
+                                    block.data.caption.split(".").pop() ||
+                                    "png";
+                                const imageFileName = `image_${timestamp}.${extension}`;
+
+                                // Save the image file
+                                const imageFileHandle =
+                                    await currentHandle.getFileHandle(
+                                        imageFileName,
+                                        { create: true }
+                                    );
+                                const writable =
+                                    await imageFileHandle.createWritable();
+                                await writable.write(blob);
+                                await writable.close();
+
+                                // Update the block data with the new filename
+                                block.data.url = imageFileName;
+                                delete block.data.isTemporary;
+                            } catch (error) {
+                                console.error(
+                                    "Error saving temporary image:",
+                                    error
+                                );
+                            }
+                        }
+                    }
                 }
 
                 const fileHandle = await currentHandle.getFileHandle(fileName, {
@@ -782,6 +869,7 @@ export function useFileSystem() {
                         name: fileName,
                         path: newPath,
                         handle: targetFileHandle,
+                        directoryHandle: targetHandle,
                     });
                 }
             } catch (error) {
@@ -871,6 +959,8 @@ export function useFileSystem() {
                                     name: currentFile.name,
                                     path: targetItemPath,
                                     handle: newFileHandle,
+                                    directoryHandle:
+                                        currentFile.directoryHandle,
                                 });
                             }
                         } else if (handle.kind === "directory") {

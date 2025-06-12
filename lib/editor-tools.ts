@@ -2,10 +2,27 @@
 class ImageTool {
     data: { url?: string; caption?: string };
     wrapper: HTMLElement | null;
+    currentFileHandle: FileSystemFileHandle | null;
+    currentDirectoryHandle: FileSystemDirectoryHandle | null;
+    temporaryBlobUrl: string | null = null;
 
     constructor({ data }: { data: { url?: string; caption?: string } }) {
         this.data = data || {};
         this.wrapper = null;
+        this.currentFileHandle = null;
+        this.currentDirectoryHandle = null;
+        this.temporaryBlobUrl = null;
+        console.log("ImageTool initialized with data:", data);
+    }
+
+    setCurrentFileHandle(handle: FileSystemFileHandle) {
+        this.currentFileHandle = handle;
+        console.log("File handle set:", handle);
+    }
+
+    setCurrentDirectoryHandle(handle: FileSystemDirectoryHandle) {
+        this.currentDirectoryHandle = handle;
+        console.log("Directory handle set:", handle);
     }
 
     render(): HTMLElement {
@@ -107,23 +124,63 @@ class ImageTool {
         });
     }
 
-    _handleFileSelect(file: File) {
+    async _handleFileSelect(file: File) {
         if (!file.type.startsWith("image/")) {
             alert("Please select an image file");
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            if (e.target && typeof e.target.result === "string") {
-                // Store the full data URL for display in editor
-                this.data.url = e.target.result;
-                // Use filename as caption
-                this.data.caption = file.name;
-                this._createImage(e.target.result, file.name);
-            }
-        };
-        reader.readAsDataURL(file);
+        console.log("Handling file select:", {
+            fileName: file.name,
+            fileType: file.type,
+            hasDirectoryHandle: !!this.currentDirectoryHandle,
+            hasFileHandle: !!this.currentFileHandle,
+        });
+
+        if (!this.currentDirectoryHandle) {
+            console.error("No directory handle available");
+            // Create a temporary blob URL for preview
+            const blob = new Blob([await file.arrayBuffer()], {
+                type: file.type,
+            });
+            const url = URL.createObjectURL(blob);
+            this.temporaryBlobUrl = url;
+            this.data.url = url;
+            this.data.caption = file.name;
+            this._createImage(url, file.name);
+            alert(
+                "Image preview created. Please save the file to persist the image."
+            );
+            return;
+        }
+
+        try {
+            // Create a unique filename for the image
+            const timestamp = Date.now();
+            const extension = file.name.split(".").pop();
+            const imageFileName = `image_${timestamp}.${extension}`;
+
+            console.log("Creating image file:", imageFileName);
+
+            // Create the image file in the current directory
+            const imageFileHandle =
+                await this.currentDirectoryHandle.getFileHandle(imageFileName, {
+                    create: true,
+                });
+            const writable = await imageFileHandle.createWritable();
+            await writable.write(file);
+            await writable.close();
+
+            console.log("Image file created successfully");
+
+            // Store the relative path for the image
+            this.data.url = imageFileName;
+            this.data.caption = file.name;
+            this._createImage(imageFileName, file.name);
+        } catch (error) {
+            console.error("Error saving image:", error);
+            alert("Failed to save image. Please try again.");
+        }
     }
 
     save() {
@@ -135,8 +192,17 @@ class ImageTool {
         ) as HTMLInputElement;
 
         if (img) {
+            // If we have a temporary blob URL, we need to save the image first
+            if (this.temporaryBlobUrl && this.currentDirectoryHandle) {
+                // The image will be saved when the file is saved
+                return {
+                    url: this.data.url || "",
+                    caption: captionInput ? captionInput.value : "",
+                    isTemporary: true,
+                };
+            }
             return {
-                url: this.data.url || "", // Keep the full data URL for editor display
+                url: this.data.url || "",
                 caption: captionInput ? captionInput.value : "",
             };
         }
@@ -153,9 +219,17 @@ class ImageTool {
 }
 
 // Export tools config function with dynamic imports and added ImageTool
-export const getEditorTools = async (): Promise<{
+export const getEditorTools = async (
+    currentFileHandle?: FileSystemFileHandle,
+    currentDirectoryHandle?: FileSystemDirectoryHandle
+): Promise<{
     [toolName: string]: any;
 }> => {
+    console.log("Getting editor tools with:", {
+        hasFileHandle: !!currentFileHandle,
+        hasDirectoryHandle: !!currentDirectoryHandle,
+    });
+
     const Header = (await import("@editorjs/header")).default;
     const List = (await import("@editorjs/list")).default;
     //@ts-ignore
@@ -165,6 +239,15 @@ export const getEditorTools = async (): Promise<{
     const Table = (await import("@editorjs/table")).default;
     const Code = (await import("@editorjs/code")).default;
     const Delimiter = (await import("@editorjs/delimiter")).default;
+
+    // Create a new instance of ImageTool with the current file handle
+    const imageTool = new ImageTool({ data: {} });
+    if (currentFileHandle) {
+        imageTool.setCurrentFileHandle(currentFileHandle);
+    }
+    if (currentDirectoryHandle) {
+        imageTool.setCurrentDirectoryHandle(currentDirectoryHandle);
+    }
 
     return {
         header: {
@@ -202,6 +285,10 @@ export const getEditorTools = async (): Promise<{
         },
         image: {
             class: ImageTool,
+            config: {
+                currentFileHandle,
+                currentDirectoryHandle,
+            },
         },
     };
 };
