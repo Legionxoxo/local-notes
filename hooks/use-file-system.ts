@@ -792,6 +792,130 @@ export function useFileSystem() {
         [currentVault, currentFile]
     );
 
+    const moveFolder = useCallback(
+        async (folderPath: string, targetFolderPath: string) => {
+            if (!currentVault) return;
+
+            try {
+                // Get source folder handle
+                let sourceParentHandle: FileSystemDirectoryHandle =
+                    currentVault.handle;
+                const sourcePathParts = folderPath.split("/");
+                const folderName = sourcePathParts.pop()!;
+
+                // Navigate to source parent folder
+                for (const part of sourcePathParts) {
+                    sourceParentHandle =
+                        await sourceParentHandle.getDirectoryHandle(part);
+                }
+
+                const sourceFolderHandle =
+                    await sourceParentHandle.getDirectoryHandle(folderName);
+
+                // Get target folder handle
+                let targetHandle: FileSystemDirectoryHandle =
+                    currentVault.handle;
+                if (targetFolderPath) {
+                    const targetPathParts = targetFolderPath.split("/");
+                    for (const part of targetPathParts) {
+                        targetHandle = await targetHandle.getDirectoryHandle(
+                            part
+                        );
+                    }
+                }
+
+                // Create new folder in target location
+                const newFolderHandle = await targetHandle.getDirectoryHandle(
+                    folderName,
+                    { create: true }
+                );
+
+                // Helper function to recursively copy contents
+                const copyFolderContents = async (
+                    sourceHandle: FileSystemDirectoryHandle,
+                    targetHandle: FileSystemDirectoryHandle,
+                    sourcePath: string,
+                    targetPath: string
+                ) => {
+                    for await (const [name, handle] of (
+                        sourceHandle as any
+                    ).entries()) {
+                        const sourceItemPath = sourcePath
+                            ? `${sourcePath}/${name}`
+                            : name;
+                        const targetItemPath = targetPath
+                            ? `${targetPath}/${name}`
+                            : name;
+
+                        if (handle.kind === "file") {
+                            // Copy file
+                            const fileHandle = handle as FileSystemFileHandle;
+                            const file = await fileHandle.getFile();
+                            const content = await file.text();
+
+                            const newFileHandle =
+                                await targetHandle.getFileHandle(name, {
+                                    create: true,
+                                });
+                            const writable =
+                                await newFileHandle.createWritable();
+                            await writable.write(content);
+                            await writable.close();
+
+                            // Update current file reference if needed
+                            if (
+                                currentFile &&
+                                currentFile.path === sourceItemPath
+                            ) {
+                                setCurrentFile({
+                                    name: currentFile.name,
+                                    path: targetItemPath,
+                                    handle: newFileHandle,
+                                });
+                            }
+                        } else if (handle.kind === "directory") {
+                            // Create and copy directory recursively
+                            const dirHandle =
+                                handle as FileSystemDirectoryHandle;
+                            const newDirHandle =
+                                await targetHandle.getDirectoryHandle(name, {
+                                    create: true,
+                                });
+                            await copyFolderContents(
+                                dirHandle,
+                                newDirHandle,
+                                sourceItemPath,
+                                targetItemPath
+                            );
+                        }
+                    }
+                };
+
+                // Copy all contents to new location
+                await copyFolderContents(
+                    sourceFolderHandle,
+                    newFolderHandle,
+                    folderPath,
+                    targetFolderPath
+                        ? `${targetFolderPath}/${folderName}`
+                        : folderName
+                );
+
+                // Delete the original folder
+                await sourceParentHandle.removeEntry(folderName, {
+                    recursive: true,
+                });
+
+                // Refresh the file list
+                await refreshFiles();
+            } catch (error) {
+                console.error("Error moving folder:", error);
+                throw error;
+            }
+        },
+        [currentVault, currentFile, refreshFiles]
+    );
+
     const deleteVault = useCallback(
         async (vaultToDelete?: VaultInfo) => {
             const vault = vaultToDelete || currentVault;
@@ -858,6 +982,7 @@ export function useFileSystem() {
         deleteFolder,
         refreshFiles: () => refreshFiles(),
         moveFile,
+        moveFolder,
         deleteVault,
         createNewVault,
     };

@@ -28,7 +28,8 @@ interface FileTreeProps {
   folders: string[]
   currentFile?: string
   onFileSelect: (filePath: string) => void
-  onFileDrop: (filePath: string, targetFolder: string) => void
+  onFileDrop: (sourcePath: string, targetFolder: string) => void
+  onFolderDrop: (sourcePath: string, targetFolder: string) => void
   onCreateFile: (fileName: string, folderPath?: string) => void
   onCreateFolder: (folderName: string, parentPath?: string) => void
   onRenameFile: (oldPath: string, newName: string) => void
@@ -44,6 +45,7 @@ export function FileTree({
   currentFile,
   onFileSelect,
   onFileDrop,
+  onFolderDrop,
   onCreateFile,
   onCreateFolder,
   onRenameFile,
@@ -53,7 +55,7 @@ export function FileTree({
   onFolderClick
 }: FileTreeProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
-  const [draggedFile, setDraggedFile] = useState<string | null>(null)
+  const [draggedItem, setDraggedItem] = useState<{ path: string; type: "file" | "folder" } | null>(null)
   const [editingItem, setEditingItem] = useState<{ path: string; type: "file" | "folder" } | null>(null)
   const [editingValue, setEditingValue] = useState("")
   const [creatingItem, setCreatingItem] = useState<{ type: "file" | "folder"; parentPath?: string } | null>(null)
@@ -62,7 +64,6 @@ export function FileTree({
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const [selectedFolderContents, setSelectedFolderContents] = useState<FileInfo[] | null>(null)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
 
@@ -101,18 +102,38 @@ export function FileTree({
   // Organize files and folders into a tree structure
   const organizeItems = (): FileInfo[] => {
     const items: FileInfo[] = []
+    const folderMap = new Map<string, FileInfo>()
 
-    // Add folders first
+    // First pass: Create folder objects
     folders.forEach((folder) => {
-      items.push({
-        name: folder,
+      const pathParts = folder.split("/")
+      const folderName = pathParts[pathParts.length - 1]
+      const folderInfo: FileInfo = {
+        name: folderName,
         path: folder,
         type: "folder",
         children: [],
-      })
+      }
+      folderMap.set(folder, folderInfo)
     })
 
-    // Add files
+    // Second pass: Build folder hierarchy
+    folders.forEach((folder) => {
+      const pathParts = folder.split("/")
+      if (pathParts.length === 1) {
+        // Root level folder
+        items.push(folderMap.get(folder)!)
+      } else {
+        // Nested folder
+        const parentPath = pathParts.slice(0, -1).join("/")
+        const parentFolder = folderMap.get(parentPath)
+        if (parentFolder) {
+          parentFolder.children!.push(folderMap.get(folder)!)
+        }
+      }
+    })
+
+    // Add files to their respective folders
     files
       .filter((file) => file.endsWith(".md"))
       .forEach((file) => {
@@ -126,22 +147,15 @@ export function FileTree({
           })
         } else {
           // File in a folder
-          const folderName = pathParts[0]
-          let folder = items.find((item) => item.type === "folder" && item.name === folderName)
-          if (!folder) {
-            folder = {
-              name: folderName,
-              path: folderName,
-              type: "folder",
-              children: [],
-            }
-            items.push(folder)
+          const folderPath = pathParts.slice(0, -1).join("/")
+          const folder = folderMap.get(folderPath)
+          if (folder) {
+            folder.children!.push({
+              name: pathParts[pathParts.length - 1],
+              path: file,
+              type: "file",
+            })
           }
-          folder.children!.push({
-            name: pathParts[pathParts.length - 1],
-            path: file,
-            type: "file",
-          })
         }
       })
 
@@ -157,14 +171,10 @@ export function FileTree({
     const newExpanded = new Set(expandedFolders)
     if (newExpanded.has(folderPath)) {
       newExpanded.delete(folderPath)
-      setSelectedFolderContents(null)
       setSelectedFolderPath(null)
       setIsSidebarVisible(false)
     } else {
       newExpanded.add(folderPath)
-      const allItems = organizeItems()
-      const folder = findFolderByPath(allItems, folderPath)
-      setSelectedFolderContents(folder?.children ?? null)
       setSelectedFolderPath(folderPath)
       setIsSidebarVisible(true)
     }
@@ -189,8 +199,8 @@ export function FileTree({
   }
 
 
-  const handleDragStart = (e: React.DragEvent, filePath: string) => {
-    setDraggedFile(filePath)
+  const handleDragStart = (e: React.DragEvent, path: string, type: "file" | "folder") => {
+    setDraggedItem({ path, type })
     e.dataTransfer.effectAllowed = "move"
   }
 
@@ -201,10 +211,20 @@ export function FileTree({
 
   const handleDrop = (e: React.DragEvent, targetFolder: string) => {
     e.preventDefault()
-    if (draggedFile && draggedFile !== targetFolder) {
-      onFileDrop(draggedFile, targetFolder)
+    if (draggedItem && draggedItem.path !== targetFolder) {
+      // Prevent dropping a folder into itself or its subfolders
+      if (draggedItem.path.startsWith(targetFolder + "/")) {
+        return
+      }
+
+      // Call the appropriate drop handler based on the dragged item type
+      if (draggedItem.type === "file") {
+        onFileDrop(draggedItem.path, targetFolder)
+      } else {
+        onFolderDrop(draggedItem.path, targetFolder)
+      }
     }
-    setDraggedFile(null)
+    setDraggedItem(null)
   }
 
   const startEditing = (path: string, type: "file" | "folder") => {
@@ -260,9 +280,11 @@ export function FileTree({
       return (
         <div key={item.path}>
           <div
+            draggable
+            onDragStart={(e) => handleDragStart(e, item.path, "folder")}
             className={cn(
               "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
-              draggedFile && "border-2 border-dashed border-muted-foreground/50",
+              draggedItem && "border-2 border-dashed border-muted-foreground/50",
               currentFile === item.path ? "font-bold text-foreground" : "text-muted-foreground"
             )}
             style={{ paddingLeft: paddingLeft + 8 }}
@@ -272,8 +294,7 @@ export function FileTree({
             <button onClick={() => {
               toggleFolder(item.path)
               onFolderClick?.(item.path)
-            }
-            } className="flex items-center gap-1 flex-1 min-w-0">
+            }} className="flex items-center gap-1 flex-1 min-w-0">
               {isExpanded ? (
                 <ChevronDown className="w-4 h-4 flex-shrink-0" />
               ) : (
@@ -339,54 +360,51 @@ export function FileTree({
                 description={`Are you sure you want to delete the folder "${item.name}" and all its contents? This action cannot be undone.`}
                 onConfirm={() => handleDeleteItem(item.path, "folder")}
               />
-
             </div>
           </div>
-          {
-            isExpanded && (
-              <div>
-                {creatingItem?.parentPath === item.path && (
-                  <div
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm"
-                    style={{ paddingLeft: paddingLeft + 32 }}
-                  >
-                    {creatingItem.type === "file" ? (
-                      <FileText className="w-4 h-4 flex-shrink-0" />
-                    ) : (
-                      <Folder className="w-4 h-4 flex-shrink-0" />
-                    )}
-                    <Input
-                      value={creatingValue}
-                      onChange={(e) => setCreatingValue(e.target.value)}
-                      onBlur={finishCreating}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") finishCreating()
-                        if (e.key === "Escape") {
-                          setCreatingItem(null)
-                          setCreatingValue("")
-                        }
-                      }}
-                      placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
-                      className="h-6 text-sm"
-                      autoFocus
-                    />
-                  </div>
-                )}
-                {item.children && item.children.map((child) => renderItem(child, level + 1))}
-              </div>
-            )
-          }
-        </div >
+          {isExpanded && item.children && (
+            <div>
+              {item.children.map((child) => renderItem(child, level + 1))}
+            </div>
+          )}
+          {creatingItem?.parentPath === item.path && (
+            <div
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm"
+              style={{ paddingLeft: paddingLeft + 32 }}
+            >
+              {creatingItem.type === "file" ? (
+                <FileText className="w-4 h-4 flex-shrink-0" />
+              ) : (
+                <Folder className="w-4 h-4 flex-shrink-0" />
+              )}
+              <Input
+                value={creatingValue}
+                onChange={(e) => setCreatingValue(e.target.value)}
+                onBlur={finishCreating}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") finishCreating()
+                  if (e.key === "Escape") {
+                    setCreatingItem(null)
+                    setCreatingValue("")
+                  }
+                }}
+                placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
+                className="h-6 text-sm"
+                autoFocus
+              />
+            </div>
+          )}
+        </div>
       )
-    } else {
+    } else if (level === 0) { // Only show root level files
       return (
         <div
           key={item.path}
           draggable
-          onDragStart={(e) => handleDragStart(e, item.path)}
+          onDragStart={(e) => handleDragStart(e, item.path, "file")}
           className={cn(
             "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
-            draggedFile && "border-2 border-dashed border-muted-foreground/50",
+            draggedItem && "border-2 border-dashed border-muted-foreground/50",
             currentFile === item.path ? "font-medium text-foreground" : "text-muted-foreground"
           )}
           style={{ paddingLeft: paddingLeft + 8 }}
@@ -430,11 +448,11 @@ export function FileTree({
               description={`Are you sure you want to delete "${item.name.replace(".md", "")}"? This action cannot be undone.`}
               onConfirm={() => handleDeleteItem(item.path, "file")}
             />
-
           </div>
         </div>
       )
     }
+    return null; // Don't render nested files
   }
 
   const renderSearchResults = () => {

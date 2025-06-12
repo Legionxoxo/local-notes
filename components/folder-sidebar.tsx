@@ -43,9 +43,12 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
     if (!folderPath || !Array.isArray(files)) return null;
 
     useEffect(() => {
-        const filteredFiles = files.filter(
-            f => f.startsWith(folderPath) && !f.slice(folderPath.length + 1).includes("/")
-        );
+        // Get files that are direct children of the current folder
+        const filteredFiles = files.filter(file => {
+            const filePath = file;
+            const relativePath = filePath.slice(folderPath.length + 1);
+            return filePath.startsWith(folderPath) && !relativePath.includes("/");
+        });
         setFolderFiles(filteredFiles);
 
         if (searchQuery.trim()) {
@@ -79,6 +82,25 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
             setSearchResults([])
         }
     }, [searchQuery, files, folderPath])
+
+    const getFolderContents = () => {
+        if (!contents) return [];
+
+        // Get only files that are direct children of the current folder
+        return contents.filter(item => {
+            const itemPath = item.path;
+            const relativePath = itemPath.slice(folderPath.length + 1);
+            return !relativePath.includes("/") && item.type === "file";
+        }).sort((a, b) => a.name.localeCompare(b.name));
+    };
+
+    const folderContents = getFolderContents();
+
+    const handleItemClick = (item: FileInfo) => {
+        if (item.type === "file") {
+            onFileClick(item.path);
+        }
+    };
 
     const highlightText = (text: string, matches: { start: number; end: number }[]) => {
         if (matches.length === 0) return text
@@ -123,7 +145,6 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
                 <div className="h-4" />
                 <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-
                     <Input
                         ref={searchInputRef}
                         value={searchQuery}
@@ -136,7 +157,6 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
                             }
                         }}
                     />
-
                     {searchQuery && (
                         <X
                             className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground cursor-pointer hover:text-foreground"
@@ -144,7 +164,6 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
                         />
                     )}
                 </div>
-
             </div>
             <div className="flex-1 overflow-auto p-2">
                 <ul className="space-y-1">
@@ -162,7 +181,6 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
                                         result.matches
                                     )}
                                 </span>
-
                             </li>
                         ))
                     ) : (
@@ -176,12 +194,14 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
                                 <span className="truncate">
                                     {(file.split("/").pop() || "").replace(/\.md$/, "")}
                                 </span>
-
                             </li>
                         ))
                     )}
                     {searchQuery.trim() && searchResults.length === 0 && (
                         <p className="text-sm text-muted-foreground px-2 py-4">No files found</p>
+                    )}
+                    {!searchQuery.trim() && folderFiles.length === 0 && (
+                        <p className="text-sm text-muted-foreground px-2 py-4">No files in this folder</p>
                     )}
                 </ul>
             </div>

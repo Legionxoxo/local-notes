@@ -93,16 +93,16 @@ body {
     }
 }
 
-.ce-block {
-    position: relative; /* Important for positioning child elements */
+/* .ce-block {
+    position: relative; 
     margin-left: -350px;
-}
+} */
 
 /* Adjust toolbar button positions */
-.ce-toolbar__plus,
+/* .ce-toolbar__plus,
 .ce-toolbar__settings-btn {
     transform: translateX(-180px);
-}
+} */
 
 /* EditorJS Header Styles */
 h1.ce-header {

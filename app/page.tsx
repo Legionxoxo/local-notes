@@ -33,6 +33,7 @@ export default function NoteTakingApp() {
     moveFile,
     deleteVault,
     createNewVault,
+    moveFolder,
   } = useFileSystem()
 
   const [editorContent, setEditorContent] = useState<any>(null)
@@ -60,7 +61,6 @@ export default function NoteTakingApp() {
 
   const handleFileClickFromSidebar = async (filePath: string) => {
     await handleFileSelect(filePath)
-    setIsSidebarVisible(false)
   }
 
   const handleCreateFile = async (fileName: string, folderPath?: string) => {
@@ -121,6 +121,16 @@ export default function NoteTakingApp() {
     }
   }
 
+  const handleFolderDrop = async (folderPath: string, targetFolder: string) => {
+    try {
+      await moveFolder(folderPath, targetFolder)
+      await refreshFiles()
+    } catch (error) {
+      console.error("Failed to move folder:", error)
+      alert("Failed to move folder. Please try again.")
+    }
+  }
+
   const handleFolderClick = (folderPath: string) => {
     setSelectedFolderPath(folderPath)
     const allItems = [...files, ...folders]
@@ -150,7 +160,7 @@ export default function NoteTakingApp() {
   return (
     <div className="flex h-screen bg-background">
       {/* File Tree Panel */}
-      <div className="w-60 border-r border-border flex flex-col h-full bg-sidebar">
+      <div className="w-64 border-r border-border flex flex-col h-full bg-sidebar">
         <div className="p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -170,6 +180,7 @@ export default function NoteTakingApp() {
             currentFile={currentFile?.path}
             onFileSelect={handleFileSelect}
             onFileDrop={handleFileDrop}
+            onFolderDrop={handleFolderDrop}
             onCreateFile={handleCreateFile}
             onCreateFolder={handleCreateFolder}
             onRenameFile={handleRenameFile}
