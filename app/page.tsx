@@ -129,7 +129,7 @@ export default function NoteTakingApp() {
 
   return (
     <div className="flex h-screen bg-background">
-      <div className="w-80 border-r border-border flex flex-col h-full">
+      <div className="w-80 border-r border-border flex flex-col h-full bg-sidebar">
         <div className="p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export default function NoteTakingApp() {
         </div>
 
         {/* File Tree - Scrollable */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto ">
           <FileTree
             files={files}
             folders={folders}

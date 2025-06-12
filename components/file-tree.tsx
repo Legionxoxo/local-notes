@@ -245,6 +245,7 @@ export function FileTree({
             className={cn(
               "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
               draggedFile && "border-2 border-dashed border-muted-foreground/50",
+              currentFile === item.path ? "font-bold text-foreground" : "text-muted-foreground"
             )}
             style={{ paddingLeft: paddingLeft + 8 }}
             onDragOver={handleDragOver}
@@ -375,8 +376,8 @@ export function FileTree({
           onDragStart={(e) => handleDragStart(e, item.path)}
           className={cn(
             "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
-            currentFile === item.path && "bg-accent text-accent-foreground",
-            draggedFile === item.path && "opacity-50",
+            draggedFile && "border-2 border-dashed border-muted-foreground/50",
+            currentFile === item.path ? "font-medium text-foreground" : "text-muted-foreground"
           )}
           style={{ paddingLeft: paddingLeft + 8 }}
           onClick={() => !isEditing && onFileSelect(item.path)}

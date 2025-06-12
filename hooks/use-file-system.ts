@@ -12,6 +12,8 @@ import {
     removeHandle,
     getAllHandles,
 } from "@/lib/indexed-db";
+import { isValidName, getInvalidNameMessage } from "@/lib/name-validation";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileInfo {
     name: string;
@@ -26,6 +28,7 @@ interface VaultInfo {
 }
 
 export function useFileSystem() {
+    const { toast } = useToast();
     const [currentVault, setCurrentVault] = useState<VaultInfo | null>(null);
     const [availableVaults, setAvailableVaults] = useState<VaultInfo[]>([]);
     const [files, setFiles] = useState<string[]>([]);
@@ -65,7 +68,6 @@ export function useFileSystem() {
                         const welcomeExists = files.includes("welcome.md");
                         if (welcomeExists && !currentFile) {
                             const welcomeContent = await openFile("welcome.md");
-                            // openFile already sets currentFile, so we don't need to do it again
                         }
                     } else {
                         // Permission revoked, clear persisted data
@@ -134,6 +136,15 @@ export function useFileSystem() {
     const selectDirectory = useCallback(
         async (vaultName: string) => {
             try {
+                if (!isValidName(vaultName)) {
+                    toast({
+                        variant: "destructive",
+                        title: "Invalid Vault Name",
+                        description: getInvalidNameMessage("vault"),
+                    });
+                    return;
+                }
+
                 if ("showDirectoryPicker" in window) {
                     // Let user select the parent directory
                     const parentHandle = await (
@@ -199,7 +210,7 @@ export function useFileSystem() {
                 throw error;
             }
         },
-        [isValidVault]
+        [toast]
     );
 
     const loadAvailableVaults = useCallback(
@@ -290,6 +301,15 @@ export function useFileSystem() {
             if (!currentVault) return;
 
             try {
+                if (!isValidName(fileName)) {
+                    toast({
+                        variant: "destructive",
+                        title: "Invalid File Name",
+                        description: getInvalidNameMessage("file"),
+                    });
+                    return;
+                }
+
                 let targetHandle = currentVault.handle;
 
                 if (folderPath) {
@@ -325,7 +345,7 @@ export function useFileSystem() {
                 console.error("Error creating file:", error);
             }
         },
-        [currentVault]
+        [currentVault, toast]
     );
 
     const createFolder = useCallback(
@@ -333,6 +353,15 @@ export function useFileSystem() {
             if (!currentVault) return;
 
             try {
+                if (!isValidName(folderName)) {
+                    toast({
+                        variant: "destructive",
+                        title: "Invalid Folder Name",
+                        description: getInvalidNameMessage("folder"),
+                    });
+                    return;
+                }
+
                 let targetHandle = currentVault.handle;
 
                 if (parentPath) {
@@ -352,7 +381,7 @@ export function useFileSystem() {
                 console.error("Error creating folder:", error);
             }
         },
-        [currentVault]
+        [currentVault, toast]
     );
 
     const renameFile = useCallback(
@@ -360,6 +389,15 @@ export function useFileSystem() {
             if (!currentVault) return;
 
             try {
+                if (!isValidName(newName)) {
+                    toast({
+                        variant: "destructive",
+                        title: "Invalid File Name",
+                        description: getInvalidNameMessage("file"),
+                    });
+                    return;
+                }
+
                 // Read the file content first
                 let sourceHandle: FileSystemDirectoryHandle =
                     currentVault.handle;
@@ -409,7 +447,7 @@ export function useFileSystem() {
                 throw error;
             }
         },
-        [currentVault, currentFile]
+        [currentVault, currentFile, toast]
     );
 
     const renameFolder = useCallback(
@@ -417,6 +455,15 @@ export function useFileSystem() {
             if (!currentVault) return;
 
             try {
+                if (!isValidName(newName)) {
+                    toast({
+                        variant: "destructive",
+                        title: "Invalid Folder Name",
+                        description: getInvalidNameMessage("folder"),
+                    });
+                    return;
+                }
+
                 // Get parent directory path and old folder name
                 const pathParts = oldPath.split("/");
                 const oldFolderName = pathParts.pop()!;
@@ -541,7 +588,7 @@ export function useFileSystem() {
                 throw error;
             }
         },
-        [currentVault, currentFile, refreshFiles]
+        [currentVault, currentFile, refreshFiles, toast]
     );
 
     const openFile = useCallback(
