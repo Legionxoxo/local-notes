@@ -6,6 +6,10 @@ import NoteEditor from "@/components/note-editor"
 import { VaultSelector } from "@/components/vault-selector"
 import { VaultManager } from "@/components/vault-manager"
 import { useFileSystem } from "@/hooks/use-file-system"
+import { FolderContentsSidebar } from "@/components/folder-sidebar"
+import { FileInfo } from "@/types/fileinfo"
+
+type TreeItem = FileInfo
 
 export default function NoteTakingApp() {
   const {
@@ -32,8 +36,10 @@ export default function NoteTakingApp() {
   } = useFileSystem()
 
   const [editorContent, setEditorContent] = useState<any>(null)
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
+  const [selectedFolderContents, setSelectedFolderContents] = useState<TreeItem[] | null>(null)
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false)
 
-  // Load welcome.md when vault is first created
   useEffect(() => {
     if (currentVault && files.includes("welcome.md") && !currentFile) {
       handleFileSelect("welcome.md")
@@ -50,6 +56,11 @@ export default function NoteTakingApp() {
   const handleFileSelect = async (filePath: string) => {
     const content = await openFile(filePath)
     setEditorContent(content)
+  }
+
+  const handleFileClickFromSidebar = async (filePath: string) => {
+    await handleFileSelect(filePath)
+    setIsSidebarVisible(false)
   }
 
   const handleCreateFile = async (fileName: string, folderPath?: string) => {
@@ -110,7 +121,17 @@ export default function NoteTakingApp() {
     }
   }
 
-  // Show loading state while initializing
+  const handleFolderClick = (folderPath: string) => {
+    setSelectedFolderPath(folderPath)
+    const allItems = [...files, ...folders]
+    const folder = allItems.find(
+      (item) => item.type === "folder" && item.path === folderPath
+    ) as TreeItem
+
+    setSelectedFolderContents(folder?.children ?? null)
+    setIsSidebarVisible(true)
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-screen bg-background items-center justify-center">
@@ -122,14 +143,14 @@ export default function NoteTakingApp() {
     )
   }
 
-  // Show vault selector if no vault is selected
   if (!currentVault) {
     return <VaultSelector onSelectVault={selectDirectory} />
   }
 
   return (
     <div className="flex h-screen bg-background">
-      <div className="w-80 border-r border-border flex flex-col h-full bg-sidebar">
+      {/* File Tree Panel */}
+      <div className="w-60 border-r border-border flex flex-col h-full bg-sidebar">
         <div className="p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -142,8 +163,7 @@ export default function NoteTakingApp() {
           </div>
         </div>
 
-        {/* File Tree - Scrollable */}
-        <div className="flex-1 overflow-auto ">
+        <div className="flex-1 overflow-auto">
           <FileTree
             files={files}
             folders={folders}
@@ -156,10 +176,10 @@ export default function NoteTakingApp() {
             onRenameFolder={handleRenameFolder}
             onDeleteFile={handleDeleteFile}
             onDeleteFolder={handleDeleteFolder}
+            onFolderClick={handleFolderClick}
           />
         </div>
 
-        {/* Vault Manager - Fixed at Bottom */}
         <VaultManager
           currentVault={currentVault}
           availableVaults={availableVaults}
@@ -169,7 +189,19 @@ export default function NoteTakingApp() {
         />
       </div>
 
-      {/* Main Editor - Full Height */}
+      {/* FolderContentsSidebar (right of FileTree) */}
+      {isSidebarVisible && selectedFolderPath && (
+        <FolderContentsSidebar
+          folderPath={selectedFolderPath}
+          files={files}
+          contents={selectedFolderContents}
+          onFileClick={handleFileClickFromSidebar}
+          isVisible={isSidebarVisible}
+          onClose={() => setIsSidebarVisible(false)}
+        />
+      )}
+
+      {/* Note Editor */}
       <div className="flex-1 h-full">
         {currentFile ? (
           <NoteEditor

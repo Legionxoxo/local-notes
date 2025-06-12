@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Save } from "lucide-react"
 import { editorJSToMarkdown } from "@/lib/markdown-converter"
 import { getEditorTools } from "@/lib/editor-tools"
@@ -13,7 +12,7 @@ interface NoteEditorProps {
   onSave: (content: any) => Promise<void>
 }
 
-const AUTO_SAVE_DEBOUNCE_MS = 3000
+const AUTO_SAVE_DEBOUNCE_MS = 1500
 
 const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSave }) => {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -161,14 +160,14 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ fileName, initialContent, onSav
       <div className="border-b border-border p-4 flex items-center justify-between flex-shrink-0">
         <h1 className="text-lg font-semibold">{fileName.replace(".md", "")}</h1>
         <div className="flex items-center gap-4">
-          <Switch
+          {/*  <Switch
             id="auto-save"
             checked={autoSaveEnabled}
             onCheckedChange={setAutoSaveEnabled}
             className="data-[state=checked]:bg-green-600"
-          />
+          /> */}
           <Button onClick={handleManualSave} size="sm" disabled={isSaving}>
-            <Save className="w-4 h-4 mr-2" />
+            <Save className="w-4 h-4 mr-1" />
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </div>

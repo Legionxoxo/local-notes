@@ -1,7 +1,5 @@
 "use client"
-
 import type React from "react"
-
 import { useState, useEffect, useRef } from "react"
 import {
   FileText,
@@ -17,26 +15,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { SearchResults } from "@/components/search-results"
+import { DeleteConfirmationModal } from "./ui/delete-modal"
+import { FileInfo } from "@/types/fileinfo"
 
-interface FileInfo {
-  name: string
-  path: string
-  type: "file" | "folder"
-  children?: FileInfo[]
-}
+
+
 
 interface FileTreeProps {
   files: string[]
@@ -50,6 +35,7 @@ interface FileTreeProps {
   onRenameFolder: (oldPath: string, newName: string) => void
   onDeleteFile: (filePath: string) => void
   onDeleteFolder: (folderPath: string) => void
+  onFolderClick?: (folderPath: string) => void
 }
 
 export function FileTree({
@@ -64,6 +50,7 @@ export function FileTree({
   onRenameFolder,
   onDeleteFile,
   onDeleteFolder,
+  onFolderClick
 }: FileTreeProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [draggedFile, setDraggedFile] = useState<string | null>(null)
@@ -75,6 +62,11 @@ export function FileTree({
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFolderContents, setSelectedFolderContents] = useState<FileInfo[] | null>(null)
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
+
+
 
   // Handle search
   useEffect(() => {
@@ -165,11 +157,37 @@ export function FileTree({
     const newExpanded = new Set(expandedFolders)
     if (newExpanded.has(folderPath)) {
       newExpanded.delete(folderPath)
+      setSelectedFolderContents(null)
+      setSelectedFolderPath(null)
+      setIsSidebarVisible(false)
     } else {
       newExpanded.add(folderPath)
+      const allItems = organizeItems()
+      const folder = findFolderByPath(allItems, folderPath)
+      setSelectedFolderContents(folder?.children ?? null)
+      setSelectedFolderPath(folderPath)
+      setIsSidebarVisible(true)
     }
     setExpandedFolders(newExpanded)
   }
+
+  const handleFileClick = (filePath: string) => {
+    onFileSelect(filePath)
+    setIsSidebarVisible(false)
+  }
+
+
+  const findFolderByPath = (items: FileInfo[], path: string): FileInfo | undefined => {
+    for (const item of items) {
+      if (item.type === "folder") {
+        if (item.path === path) return item
+        const found = findFolderByPath(item.children || [], path)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
 
   const handleDragStart = (e: React.DragEvent, filePath: string) => {
     setDraggedFile(filePath)
@@ -251,7 +269,11 @@ export function FileTree({
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, item.path)}
           >
-            <button onClick={() => toggleFolder(item.path)} className="flex items-center gap-1 flex-1 min-w-0">
+            <button onClick={() => {
+              toggleFolder(item.path)
+              onFolderClick?.(item.path)
+            }
+            } className="flex items-center gap-1 flex-1 min-w-0">
               {isExpanded ? (
                 <ChevronDown className="w-4 h-4 flex-shrink-0" />
               ) : (
@@ -302,8 +324,8 @@ export function FileTree({
               >
                 <FolderPlus className="w-3 h-3" />
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              <DeleteConfirmationModal
+                trigger={
                   <Button
                     size="sm"
                     variant="ghost"
@@ -312,61 +334,49 @@ export function FileTree({
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Folder</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete the folder "{item.name}" and all its contents? This action cannot
-                      be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleDeleteItem(item.path, "folder")}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                }
+                title="Delete Folder"
+                description={`Are you sure you want to delete the folder "${item.name}" and all its contents? This action cannot be undone.`}
+                onConfirm={() => handleDeleteItem(item.path, "folder")}
+              />
+
             </div>
           </div>
-          {isExpanded && (
-            <div>
-              {creatingItem?.parentPath === item.path && (
-                <div
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm"
-                  style={{ paddingLeft: paddingLeft + 32 }}
-                >
-                  {creatingItem.type === "file" ? (
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                  ) : (
-                    <Folder className="w-4 h-4 flex-shrink-0" />
-                  )}
-                  <Input
-                    value={creatingValue}
-                    onChange={(e) => setCreatingValue(e.target.value)}
-                    onBlur={finishCreating}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") finishCreating()
-                      if (e.key === "Escape") {
-                        setCreatingItem(null)
-                        setCreatingValue("")
-                      }
-                    }}
-                    placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
-                    className="h-6 text-sm"
-                    autoFocus
-                  />
-                </div>
-              )}
-              {item.children && item.children.map((child) => renderItem(child, level + 1))}
-            </div>
-          )}
-        </div>
+          {
+            isExpanded && (
+              <div>
+                {creatingItem?.parentPath === item.path && (
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm"
+                    style={{ paddingLeft: paddingLeft + 32 }}
+                  >
+                    {creatingItem.type === "file" ? (
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                    ) : (
+                      <Folder className="w-4 h-4 flex-shrink-0" />
+                    )}
+                    <Input
+                      value={creatingValue}
+                      onChange={(e) => setCreatingValue(e.target.value)}
+                      onBlur={finishCreating}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") finishCreating()
+                        if (e.key === "Escape") {
+                          setCreatingItem(null)
+                          setCreatingValue("")
+                        }
+                      }}
+                      placeholder={creatingItem.type === "file" ? "File name" : "Folder name"}
+                      className="h-6 text-sm"
+                      autoFocus
+                    />
+                  </div>
+                )}
+                {item.children && item.children.map((child) => renderItem(child, level + 1))}
+              </div>
+            )
+          }
+        </div >
       )
     } else {
       return (
@@ -404,8 +414,8 @@ export function FileTree({
             </span>
           )}
           <div className="opacity-0 group-hover:opacity-100 ml-auto">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+            <DeleteConfirmationModal
+              trigger={
                 <Button
                   size="sm"
                   variant="ghost"
@@ -415,25 +425,12 @@ export function FileTree({
                 >
                   <Trash2 className="w-3 h-3" />
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete File</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete "{item.name.replace(".md", "")}"? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => handleDeleteItem(item.path, "file")}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              }
+              title="Delete File"
+              description={`Are you sure you want to delete "${item.name.replace(".md", "")}"? This action cannot be undone.`}
+              onConfirm={() => handleDeleteItem(item.path, "file")}
+            />
+
           </div>
         </div>
       )
@@ -543,6 +540,19 @@ export function FileTree({
           </>
         )}
       </div>
+      {/*   {selectedFolderPath && (
+        <FolderContentsSidebar
+          folderPath={selectedFolderPath}
+          files={files}
+          contents={selectedFolderContents}
+          onFileClick={handleFileClick}
+          isVisible={isSidebarVisible}
+          onClose={() => setIsSidebarVisible(false)}
+        />
+      )} */}
+
+
+
     </div>
   )
 }
