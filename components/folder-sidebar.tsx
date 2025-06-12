@@ -37,18 +37,20 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
 }) => {
     const [searchQuery, setSearchQuery] = useState("")
     const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+    const [folderFiles, setFolderFiles] = useState<string[]>([])
     const searchInputRef = useRef<HTMLInputElement>(null)
 
     if (!folderPath || !Array.isArray(files)) return null;
 
-    const folderFiles = files.filter(
-        f => f.startsWith(folderPath) && !f.slice(folderPath.length + 1).includes("/")
-    );
-
     useEffect(() => {
+        const filteredFiles = files.filter(
+            f => f.startsWith(folderPath) && !f.slice(folderPath.length + 1).includes("/")
+        );
+        setFolderFiles(filteredFiles);
+
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase()
-            const results: SearchResult[] = folderFiles.map(file => {
+            const results: SearchResult[] = filteredFiles.map(file => {
                 const fileName = file.split("/").pop() || ""
                 const lowerFileName = fileName.toLowerCase()
                 const matches: { start: number; end: number }[] = []
@@ -76,7 +78,7 @@ export const FolderContentsSidebar: React.FC<FolderContentsSidebarProps> = ({
         } else {
             setSearchResults([])
         }
-    }, [searchQuery, folderFiles])
+    }, [searchQuery, files, folderPath])
 
     const highlightText = (text: string, matches: { start: number; end: number }[]) => {
         if (matches.length === 0) return text
