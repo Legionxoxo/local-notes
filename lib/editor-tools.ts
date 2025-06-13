@@ -1,12 +1,16 @@
 // Custom ImageTool for EditorJS with proper toolbox icon as SVG element
 class ImageTool {
-    data: { url?: string; caption?: string };
+    data: { url?: string; caption?: string; isTemporary?: boolean };
     wrapper: HTMLElement | null;
     currentFileHandle: FileSystemFileHandle | null;
     currentDirectoryHandle: FileSystemDirectoryHandle | null;
     temporaryBlobUrl: string | null = null;
 
-    constructor({ data }: { data: { url?: string; caption?: string } }) {
+    constructor({
+        data,
+    }: {
+        data: { url?: string; caption?: string; isTemporary?: boolean };
+    }) {
         this.data = data || {};
         this.wrapper = null;
         this.currentFileHandle = null;
@@ -119,14 +123,14 @@ class ImageTool {
             ) {
                 this._handleFileSelect(e.dataTransfer.files[0]);
             } else {
-                alert("Please drop an image file");
+                console.log("Please drop an image file");
             }
         });
     }
 
     async _handleFileSelect(file: File) {
         if (!file.type.startsWith("image/")) {
-            alert("Please select an image file");
+            console.log("Please select an image file");
             return;
         }
 
@@ -137,49 +141,52 @@ class ImageTool {
             hasFileHandle: !!this.currentFileHandle,
         });
 
-        if (!this.currentDirectoryHandle) {
-            console.error("No directory handle available");
-            // Create a temporary blob URL for preview
-            const blob = new Blob([await file.arrayBuffer()], {
-                type: file.type,
-            });
-            const url = URL.createObjectURL(blob);
-            this.temporaryBlobUrl = url;
-            this.data.url = url;
-            this.data.caption = file.name;
-            this._createImage(url, file.name);
-            alert(
-                "Image preview created. Please save the file to persist the image."
-            );
-            return;
-        }
-
         try {
             // Create a unique filename for the image
             const timestamp = Date.now();
             const extension = file.name.split(".").pop();
             const imageFileName = `image_${timestamp}.${extension}`;
 
-            console.log("Creating image file:", imageFileName);
+            if (this.currentDirectoryHandle) {
+                console.log("Creating image file:", imageFileName);
 
-            // Create the image file in the current directory
-            const imageFileHandle =
-                await this.currentDirectoryHandle.getFileHandle(imageFileName, {
-                    create: true,
+                // Create the image file in the current directory
+                const imageFileHandle =
+                    await this.currentDirectoryHandle.getFileHandle(
+                        imageFileName,
+                        {
+                            create: true,
+                        }
+                    );
+                const writable = await imageFileHandle.createWritable();
+                await writable.write(file);
+                await writable.close();
+
+                console.log("Image file created successfully");
+
+                // Store the relative path for the image
+                this.data.url = imageFileName;
+                this.data.caption = file.name;
+                this._createImage(imageFileName, file.name);
+            } else {
+                console.error("No directory handle available");
+                // Create a temporary blob URL for preview
+                const blob = new Blob([await file.arrayBuffer()], {
+                    type: file.type,
                 });
-            const writable = await imageFileHandle.createWritable();
-            await writable.write(file);
-            await writable.close();
-
-            console.log("Image file created successfully");
-
-            // Store the relative path for the image
-            this.data.url = imageFileName;
-            this.data.caption = file.name;
-            this._createImage(imageFileName, file.name);
+                const url = URL.createObjectURL(blob);
+                this.temporaryBlobUrl = url;
+                this.data.url = url;
+                this.data.caption = file.name;
+                this.data.isTemporary = true;
+                this._createImage(url, file.name);
+                console.log(
+                    "Image preview created. Please save the file to persist the image."
+                );
+            }
         } catch (error) {
-            console.error("Error saving image:", error);
-            alert("Failed to save image. Please try again.");
+            console.error("Error handling file select:", error);
+            console.log("Failed to process image. Please try again.");
         }
     }
 
@@ -192,18 +199,10 @@ class ImageTool {
         ) as HTMLInputElement;
 
         if (img) {
-            // If we have a temporary blob URL, we need to save the image first
-            if (this.temporaryBlobUrl && this.currentDirectoryHandle) {
-                // The image will be saved when the file is saved
-                return {
-                    url: this.data.url || "",
-                    caption: captionInput ? captionInput.value : "",
-                    isTemporary: true,
-                };
-            }
             return {
                 url: this.data.url || "",
                 caption: captionInput ? captionInput.value : "",
+                isTemporary: !!this.temporaryBlobUrl,
             };
         }
 

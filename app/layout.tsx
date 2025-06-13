@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'Notes App',
   description: 'Create you Notes ',
   generator: 'gg.dev',
+  icons: [{ rel: "icon", url: "/favicon.ico" }],
 }
 
 export default function RootLayout({
