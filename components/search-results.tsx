@@ -3,8 +3,14 @@
 import { FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+interface SearchResultItem {
+    filename: string
+    content?: string
+    distance?: number
+}
+
 interface SearchResultsProps {
-    results: string[]
+    results: (string | SearchResultItem)[]
     query: string
     currentFile?: string
     onFileSelect: (filePath: string) => void
@@ -21,7 +27,11 @@ export function SearchResults({ results, query, currentFile, onFileSelect }: Sea
 
     return (
         <div className="space-y-1">
-            {results.map((filePath) => {
+            {results.map((result, idx) => {
+                let filePath = typeof result === 'string' ? result : result.filename
+                let content = typeof result === 'string' ? undefined : result.content
+                let distance = typeof result === 'string' ? undefined : result.distance
+                console.log('Search result item:', result)
                 const fileName = filePath.split("/").pop() || ""
                 const folderPath = filePath.split("/").slice(0, -1).join("/")
 
@@ -48,22 +58,30 @@ export function SearchResults({ results, query, currentFile, onFileSelect }: Sea
 
                 return (
                     <div
-                        key={filePath}
+                        key={filePath + idx}
                         className={cn(
-                            "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer",
+                            "flex flex-col gap-0.5 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer",
                             currentFile === filePath && "bg-accent text-accent-foreground",
                         )}
                         onClick={() => onFileSelect(filePath)}
                     >
-                        <FileText className="w-4 h-4 flex-shrink-0" />
-                        <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate font-medium">
                                 {typeof displayName === 'string'
                                     ? displayName.replace(".md", "")
                                     : displayName}
                             </span>
-                            {folderPath && <span className="text-xs text-muted-foreground truncate">{folderPath}</span>}
+                            {distance !== undefined && (
+                                <span className="ml-2 text-xs text-muted-foreground">{distance.toFixed(2)}</span>
+                            )}
                         </div>
+                        {folderPath && <span className="text-xs text-muted-foreground truncate">{folderPath}</span>}
+                        {content && (
+                            <span className="text-xs text-muted-foreground truncate">
+                                {content.slice(0, 120)}{content.length > 120 ? '...' : ''}
+                            </span>
+                        )}
                     </div>
                 )
             })}

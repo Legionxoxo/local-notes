@@ -19,9 +19,9 @@ import { cn } from "@/lib/utils"
 import { SearchResults } from "@/components/search-results"
 import { DeleteConfirmationModal } from "./ui/delete-modal"
 import { FileInfo } from "@/types/fileinfo"
-
-
-
+import { toast } from "@/components/ui/use-toast"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface FileTreeProps {
   files: string[]
@@ -66,22 +66,44 @@ export function FileTree({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null)
-
-
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [fsTree, setFsTree] = useState<any>(null)
+  const [checkedPaths, setCheckedPaths] = useState<Set<string>>(new Set())
+  const [fsHandles, setFsHandles] = useState<{ [path: string]: FileSystemFileHandle }>({})
 
   // Handle search
   useEffect(() => {
-    if (isSearchActive && searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      const results = files.filter((file) => {
-        const fileName = file.split("/").pop() || ""
-        return fileName.toLowerCase().includes(query)
-      })
-      setSearchResults(results)
-    } else {
-      setSearchResults([])
+    let ignore = false
+    const doSearch = async () => {
+      if (isSearchActive && searchQuery.trim()) {
+        setSearchLoading(true)
+        try {
+          const res = await fetch("http://localhost:3000/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: searchQuery })
+          })
+          if (!res.ok) throw new Error("Search failed")
+          const data = await res.json()
+          console.log('Search API response:', data)
+          // Map to filenames for display, but keep full objects for richer UI
+          if (!ignore) setSearchResults(data.results || [])
+        } catch (err) {
+          if (!ignore) setSearchResults([])
+        } finally {
+          if (!ignore) setSearchLoading(false)
+        }
+      } else {
+        setSearchResults([])
+      }
     }
-  }, [searchQuery, files, isSearchActive])
+    doSearch()
+    return () => { ignore = true }
+  }, [searchQuery, isSearchActive])
 
   // Focus search input when search is activated
   useEffect(() => {
@@ -186,7 +208,6 @@ export function FileTree({
     setIsSidebarVisible(false)
   }
 
-
   const findFolderByPath = (items: FileInfo[], path: string): FileInfo | undefined => {
     for (const item of items) {
       if (item.type === "folder") {
@@ -197,7 +218,6 @@ export function FileTree({
     }
     return undefined
   }
-
 
   const handleDragStart = (e: React.DragEvent, path: string, type: "file" | "folder") => {
     setDraggedItem({ path, type })
@@ -278,7 +298,8 @@ export function FileTree({
 
     if (item.type === "folder") {
       return (
-        <div key={item.path}>
+        <div key={item.path} className={cn(selectedItems.includes(item.path) && "bg-accent/30")}
+          onClick={e => handleItemSelect(item.path, e)}>
           <div
             draggable
             onDragStart={(e) => handleDragStart(e, item.path, "folder")}
@@ -331,7 +352,7 @@ export function FileTree({
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0"
-                onClick={() => startCreating("file", item.path)}
+                onClick={(e) => { e.stopPropagation(); startCreating("file", item.path) }}
                 title="New file"
               >
                 <Plus className="w-3 h-3" />
@@ -340,7 +361,7 @@ export function FileTree({
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0"
-                onClick={() => startCreating("folder", item.path)}
+                onClick={(e) => { e.stopPropagation(); startCreating("folder", item.path) }}
                 title="New folder"
               >
                 <FolderPlus className="w-3 h-3" />
@@ -398,56 +419,58 @@ export function FileTree({
       )
     } else if (level === 0) { // Only show root level files
       return (
-        <div
-          key={item.path}
-          draggable
-          onDragStart={(e) => handleDragStart(e, item.path, "file")}
-          className={cn(
-            "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
-            draggedItem && "border-2 border-dashed border-muted-foreground/50",
-            currentFile === item.path ? "font-medium text-foreground" : "text-muted-foreground"
-          )}
-          style={{ paddingLeft: paddingLeft + 8 }}
-          onClick={() => !isEditing && onFileSelect(item.path)}
-        >
-          <FileText className="w-4 h-4 flex-shrink-0" />
-          {isEditing ? (
-            <Input
-              value={editingValue}
-              onChange={(e) => setEditingValue(e.target.value)}
-              onBlur={finishEditing}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") finishEditing()
-                if (e.key === "Escape") {
-                  setEditingItem(null)
-                  setEditingValue("")
+        <div key={item.path} className={cn(selectedItems.includes(item.path) && "bg-accent/30")}
+          onClick={e => handleItemSelect(item.path, e)}>
+          <div
+            draggable
+            onDragStart={(e) => handleDragStart(e, item.path, "file")}
+            className={cn(
+              "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors group",
+              draggedItem && "border-2 border-dashed border-muted-foreground/50",
+              currentFile === item.path ? "font-medium text-foreground" : "text-muted-foreground"
+            )}
+            style={{ paddingLeft: paddingLeft + 8 }}
+            onClick={() => !isEditing && onFileSelect(item.path)}
+          >
+            <FileText className="w-4 h-4 flex-shrink-0" />
+            {isEditing ? (
+              <Input
+                value={editingValue}
+                onChange={(e) => setEditingValue(e.target.value)}
+                onBlur={finishEditing}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") finishEditing()
+                  if (e.key === "Escape") {
+                    setEditingItem(null)
+                    setEditingValue("")
+                  }
+                }}
+                className="h-6 text-sm"
+                autoFocus
+              />
+            ) : (
+              <span className="truncate flex-1" onDoubleClick={() => startEditing(item.path, "file")}>
+                {item.name.replace(".md", "")}
+              </span>
+            )}
+            <div className="opacity-0 group-hover:opacity-100 ml-auto">
+              <DeleteConfirmationModal
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                    title="Delete file"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
                 }
-              }}
-              className="h-6 text-sm"
-              autoFocus
-            />
-          ) : (
-            <span className="truncate flex-1" onDoubleClick={() => startEditing(item.path, "file")}>
-              {item.name.replace(".md", "")}
-            </span>
-          )}
-          <div className="opacity-0 group-hover:opacity-100 ml-auto">
-            <DeleteConfirmationModal
-              trigger={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                  title="Delete file"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              }
-              title="Delete File"
-              description={`Are you sure you want to delete "${item.name.replace(".md", "")}"? This action cannot be undone.`}
-              onConfirm={() => handleDeleteItem(item.path, "file")}
-            />
+                title="Delete File"
+                description={`Are you sure you want to delete "${item.name.replace(".md", "")}"? This action cannot be undone.`}
+                onConfirm={() => handleDeleteItem(item.path, "file")}
+              />
+            </div>
           </div>
         </div>
       )
@@ -456,17 +479,195 @@ export function FileTree({
   }
 
   const renderSearchResults = () => {
+    console.log('Search results to render:', searchResults)
     return (
-      <SearchResults
-        results={searchResults}
-        query={searchQuery}
-        currentFile={currentFile}
-        onFileSelect={onFileSelect}
-      />
+      <>
+        {searchLoading ? (
+          <div className="px-2 py-4 text-sm text-muted-foreground">Searching...</div>
+        ) : (
+          <SearchResults
+            results={searchResults}
+            query={searchQuery}
+            currentFile={currentFile}
+            onFileSelect={onFileSelect}
+          />
+        )}
+      </>
     )
   }
 
   const organizedItems = organizeItems()
+
+  // Handle item click for selection
+  const handleItemSelect = (path: string, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedItems((prev) => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path])
+    } else if (e.shiftKey && selectedItems.length > 0) {
+      // Range select (optional, simple version: select all between last and current)
+      const allItems = organizedItems.flatMap(flattenItems)
+      const lastIdx = allItems.findIndex(i => i.path === selectedItems[selectedItems.length - 1])
+      const currIdx = allItems.findIndex(i => i.path === path)
+      if (lastIdx !== -1 && currIdx !== -1) {
+        const [start, end] = [lastIdx, currIdx].sort((a, b) => a - b)
+        const range = allItems.slice(start, end + 1).map(i => i.path)
+        setSelectedItems(Array.from(new Set([...selectedItems, ...range])))
+      }
+    } else {
+      setSelectedItems([path])
+    }
+  }
+
+  // Helper to flatten tree for range select
+  const flattenItems = (item: FileInfo): FileInfo[] => {
+    if (item.type === "folder" && item.children) {
+      return [item, ...item.children.flatMap(flattenItems)]
+    }
+    return [item]
+  }
+
+  // Open modal and prompt for directory
+  const handleOpenUploadModal = async () => {
+    try {
+      // @ts-ignore
+      const dirHandle = await window.showDirectoryPicker()
+      const tree: any = { name: dirHandle.name, path: dirHandle.name, type: "folder", children: [] }
+      const handles: { [path: string]: FileSystemFileHandle } = {}
+      await readDirectoryRecursive(dirHandle, tree, dirHandle.name, handles)
+      setFsTree(tree)
+      setFsHandles(handles)
+      setCheckedPaths(new Set())
+      setShowUploadModal(true)
+    } catch (e) {
+      // User cancelled
+    }
+  }
+
+  // Recursively read directory
+  const readDirectoryRecursive = async (dirHandle: FileSystemDirectoryHandle, node: any, basePath: string, handles: any) => {
+    for await (const entry of (dirHandle as any).values()) {
+      const name = entry.name
+      const relPath = basePath + "/" + name
+      if (entry.kind === "file") {
+        node.children.push({ name, path: relPath, type: "file" })
+        handles[relPath] = entry
+      } else if (entry.kind === "directory") {
+        const childNode: any = { name, path: relPath, type: "folder", children: [] }
+        node.children.push(childNode)
+        await readDirectoryRecursive(entry, childNode, relPath, handles)
+      }
+    }
+  }
+
+  // Toggle checkbox
+  const handleCheck = (path: string) => {
+    setCheckedPaths(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
+
+  // Gather all checked files (recursively)
+  const gatherCheckedFiles = (node: any): string[] => {
+    if (node.type === "file" && checkedPaths.has(node.path)) return [node.path]
+    if (node.type === "folder") {
+      let files: string[] = []
+      for (const child of node.children) {
+        files = files.concat(gatherCheckedFiles(child))
+      }
+      return files
+    }
+    return []
+  }
+
+  // Upload checked files
+  const handleUploadChecked = async () => {
+    setUploading(true)
+    try {
+      if (!fsTree) return
+      const filesToUpload = gatherCheckedFiles(fsTree)
+      if (filesToUpload.length === 0) throw new Error("No files selected.")
+      const formData = new FormData()
+      for (const path of filesToUpload) {
+        const handle = fsHandles[path]
+        if (handle) {
+          const file = await handle.getFile()
+          formData.append("files", file, path)
+        }
+      }
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+      if (!res.ok) throw new Error("Upload failed")
+      toast({ title: "Upload successful", description: `${filesToUpload.length} file(s) uploaded.` })
+      setShowUploadModal(false)
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Render file/folder tree with checkboxes
+  const renderFsTree = (node: any) => {
+    if (!node) return null
+    if (node.type === "file") {
+      return (
+        <div key={node.path} className="flex items-center gap-2 pl-4">
+          <Checkbox checked={checkedPaths.has(node.path)} onCheckedChange={() => handleCheck(node.path)} />
+          <span>{node.name}</span>
+        </div>
+      )
+    }
+    return (
+      <div key={node.path} className="pl-2">
+        <div className="font-medium flex items-center gap-2">
+          <Checkbox checked={checkedPaths.has(node.path)} onCheckedChange={() => handleCheck(node.path)} />
+          <span>{node.name}</span>
+        </div>
+        <div className="ml-4 border-l border-muted-foreground/20">
+          {node.children.map(renderFsTree)}
+        </div>
+      </div>
+    )
+  }
+
+  // Helper to find item by path
+  const findItemByPath = (items: FileInfo[], path: string): FileInfo | undefined => {
+    for (const item of items) {
+      if (item.path === path) return item
+      if (item.type === "folder" && item.children) {
+        const found = findItemByPath(item.children, path)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  // Helper to get all files in a folder
+  const getAllFilesInFolder = async (folder: FileInfo): Promise<File[]> => {
+    let files: File[] = []
+    if (folder.children) {
+      for (const child of folder.children) {
+        if (child.type === "file") {
+          const file = await getFileFromPath(child.path)
+          if (file) files.push(file)
+        } else if (child.type === "folder") {
+          const subFiles = await getAllFilesInFolder(child)
+          files = files.concat(subFiles)
+        }
+      }
+    }
+    return files
+  }
+
+  // Dummy implementation: replace with your file system logic
+  const getFileFromPath = async (path: string): Promise<File | null> => {
+    // You must implement this to get a File object from your app's file system
+    return null
+  }
 
   return (
     <div className="p-2">
@@ -496,6 +697,15 @@ export function FileTree({
                 title="New folder"
               >
                 <FolderPlus className="w-3 h-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={handleOpenUploadModal}
+                title="Upload selected"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" /></svg>
               </Button>
               <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={toggleSearch} title="Search files">
                 <Search className="w-3 h-3" />
@@ -569,7 +779,28 @@ export function FileTree({
         />
       )} */}
 
-
+      <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Upload Files</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {fsTree && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="col-span-3">
+                  {renderFsTree(fsTree)}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowUploadModal(false)} variant="outline">Cancel</Button>
+            <Button onClick={handleUploadChecked} disabled={uploading || checkedPaths.size === 0}>
+              {uploading ? "Uploading..." : "Done"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )
