@@ -76,13 +76,29 @@ export function FileTree({
   const [fsTree, setFsTree] = useState<any>(null)
   const [checkedPaths, setCheckedPaths] = useState<Set<string>>(new Set())
   const [fsHandles, setFsHandles] = useState<{ [path: string]: FileSystemFileHandle }>({})
+  const searchDebounceTimeout = useRef<NodeJS.Timeout | null>(null)
 
   // Handle search
   useEffect(() => {
     let ignore = false
-    const doSearch = async () => {
-      if (isSearchActive && searchQuery.trim()) {
-        setSearchLoading(true)
+    if (searchDebounceTimeout.current) {
+      clearTimeout(searchDebounceTimeout.current)
+    }
+    if (isSearchActive && searchQuery.trim()) {
+      // Step 1: Local file name search (case-insensitive, ignore .md)
+      const localMatches = files.filter(file => {
+        if (!file.endsWith('.md')) return false;
+        const name = file.split('/').pop()?.replace(/\.md$/, '') || '';
+        return name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+      });
+      if (localMatches.length > 0) {
+        setSearchResults(localMatches);
+        setSearchLoading(false);
+        return;
+      }
+      // Step 2: API similarity search if no local matches
+      setSearchLoading(true)
+      searchDebounceTimeout.current = setTimeout(async () => {
         try {
           const res = await fetch("http://localhost:3000/search", {
             method: "POST",
@@ -91,21 +107,18 @@ export function FileTree({
           })
           if (!res.ok) throw new Error("Search failed")
           const data = await res.json()
-          console.log('Search API response:', data)
-          // Map to filenames for display, but keep full objects for richer UI
           if (!ignore) setSearchResults(data.results || [])
         } catch (err) {
           if (!ignore) setSearchResults([])
         } finally {
           if (!ignore) setSearchLoading(false)
         }
-      } else {
-        setSearchResults([])
-      }
+      }, 300)
+    } else {
+      setSearchResults([])
     }
-    doSearch()
-    return () => { ignore = true }
-  }, [searchQuery, isSearchActive])
+    return () => { ignore = true; if (searchDebounceTimeout.current) clearTimeout(searchDebounceTimeout.current) }
+  }, [searchQuery, isSearchActive, files])
 
   // Focus search input when search is activated
   useEffect(() => {
