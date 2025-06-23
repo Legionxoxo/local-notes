@@ -37,6 +37,7 @@ interface FileTreeProps {
   onDeleteFile: (filePath: string) => void
   onDeleteFolder: (folderPath: string) => void
   onFolderClick?: (folderPath: string) => void
+  vaultname: string
 }
 
 export function FileTree({
@@ -52,7 +53,8 @@ export function FileTree({
   onRenameFolder,
   onDeleteFile,
   onDeleteFolder,
-  onFolderClick
+  onFolderClick,
+  vaultname
 }: FileTreeProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [draggedItem, setDraggedItem] = useState<{ path: string; type: "file" | "folder" } | null>(null)
@@ -588,7 +590,11 @@ export function FileTree({
       if (!fsTree) return
       const filesToUpload = gatherCheckedFiles(fsTree)
       if (filesToUpload.length === 0) throw new Error("No files selected.")
+      console.log('frontend vault', vaultname, typeof vaultname)
       const formData = new FormData()
+      formData.append("vaultname", vaultname);
+
+
       for (const path of filesToUpload) {
         const handle = fsHandles[path]
         if (handle) {

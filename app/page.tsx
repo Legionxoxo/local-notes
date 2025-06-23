@@ -199,6 +199,7 @@ export default function NoteTakingApp() {
             onDeleteFile={handleDeleteFile}
             onDeleteFolder={handleDeleteFolder}
             onFolderClick={handleFolderClick}
+            vaultname={currentVault.name}
           />
         </div>
 

@@ -6,6 +6,8 @@ export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
         const files = formData.getAll("files");
+        const vaultname = formData.get("vaultname");
+
         if (!files.length) {
             return NextResponse.json(
                 { error: "No files uploaded" },
@@ -15,6 +17,10 @@ export async function POST(req: NextRequest) {
 
         // Forward to the real upload endpoint
         const cloudForm = new FormData();
+        const vaultnameValue =
+            typeof vaultname === "string" ? vaultname : String(vaultname);
+        cloudForm.append("vaultname", vaultnameValue);
+
         for (const file of files) {
             if (file instanceof Blob) {
                 // @ts-ignore
