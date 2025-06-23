@@ -25,17 +25,23 @@ export function SearchResults({ results, query, currentFile, onFileSelect }: Sea
         )
     }
 
+    const seen = new Set<string>()
+
     return (
         <div className="space-y-1">
             {results.map((result, idx) => {
-                let filePath = typeof result === 'string' ? result : result.filename
-                let content = typeof result === 'string' ? undefined : result.content
-                let distance = typeof result === 'string' ? undefined : result.distance
-                console.log('Search result item:', result)
+                const filePath = typeof result === "string" ? result : result.filename
+
+                // Avoid duplicate filenames
+                if (seen.has(filePath)) return null
+                seen.add(filePath)
+
+                const content = typeof result === "string" ? undefined : result.content
+                const distance = typeof result === "string" ? undefined : result.distance
+
                 const fileName = filePath.split("/").pop() || ""
                 const folderPath = filePath.split("/").slice(0, -1).join("/")
 
-                // Highlight matching text
                 const lowerFileName = fileName.toLowerCase()
                 const lowerQuery = query.toLowerCase()
                 const index = lowerFileName.indexOf(lowerQuery)
@@ -58,7 +64,7 @@ export function SearchResults({ results, query, currentFile, onFileSelect }: Sea
 
                 return (
                     <div
-                        key={filePath + idx}
+                        key={filePath}
                         className={cn(
                             "flex flex-col gap-0.5 px-2 py-1.5 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer",
                             currentFile === filePath && "bg-accent text-accent-foreground",
